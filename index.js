@@ -16,7 +16,7 @@ const paymentRoutes = require('./routes/payments');
 const reviewRoutes = require('./routes/reviews');
 const adminRoutes = require('./routes/admin');
 const uploadRoutes = require('./routes/upload');
-const errorHandler = require('./middleware/errorHandler');
+const { errorHandler } = require('./middleware/errorHandler');
 
 dotenv.config();
 const app = express();

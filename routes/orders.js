@@ -3,10 +3,15 @@ const router = express.Router();
 const orderController = require('../controllers/orderController');
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
-router.post('/create', authMiddleware, orderController.createOrder);
+// User routes
+router.post('/', authMiddleware, orderController.createOrder);
 router.get('/', authMiddleware, orderController.getOrders);
-router.get('/:id', authMiddleware, orderController.getOrder);
-router.put('/:id/status', authMiddleware, adminMiddleware, orderController.updateOrderStatus);
+router.get('/:orderId', authMiddleware, orderController.getOrder);
+router.patch('/:orderId/cancel', authMiddleware, orderController.cancelOrder);
+
+// Admin routes
 router.get('/admin/all', authMiddleware, adminMiddleware, orderController.getAllOrders);
+router.patch('/admin/:orderId/status', authMiddleware, adminMiddleware, orderController.updateOrderStatus);
+router.patch('/admin/:orderId/payment', authMiddleware, adminMiddleware, orderController.updatePaymentStatus);
 
 module.exports = router;
