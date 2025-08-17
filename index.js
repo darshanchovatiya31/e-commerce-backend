@@ -16,6 +16,7 @@ const paymentRoutes = require('./routes/payments');
 const reviewRoutes = require('./routes/reviews');
 const adminRoutes = require('./routes/admin');
 const uploadRoutes = require('./routes/upload');
+const shopRoutes = require('./routes/shop');
 const { errorHandler } = require('./middleware/errorHandler');
 
 dotenv.config();
@@ -43,7 +44,7 @@ if (process.env.NODE_ENV !== 'production') {
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true
 }));
 app.use(express.json());
@@ -52,12 +53,18 @@ app.use(express.urlencoded({ extended: true }));
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000,
+  message: {
+    success: false,
+    message: 'Too many requests from this IP, please try again later.',
+    timestamp: new Date().toISOString()
+  }
 });
 app.use(limiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/shop', shopRoutes); // Shop routes (must be before products)
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/cart', cartRoutes);
@@ -76,10 +83,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use(errorHandler);
 
 // Database connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
+mongoose.connect(process.env.MONGODB_URI)
 .then(() => logger.info('Connected to MongoDB'))
 .catch(err => logger.error('MongoDB connection error:', err));
 

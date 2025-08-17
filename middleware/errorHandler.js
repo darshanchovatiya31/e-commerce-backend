@@ -17,8 +17,8 @@ const handleCastErrorDB = (err) => {
 };
 
 const handleDuplicateFieldsDB = (err) => {
-  const value = err.errmsg.match(/(["'])(\\?.)*?\1/)[0];
-  const message = `Duplicate field value: ${value}. Please use another value!`;
+  const dupField = err.keyValue ? JSON.stringify(err.keyValue) : 'Duplicate value';
+  const message = `Duplicate field: ${dupField}. Please use another value!`;
   return new AppError(message, 400);
 };
 
@@ -36,6 +36,8 @@ const handleJWTExpiredError = () =>
 
 // Send error response for development
 const sendErrorDev = (err, res) => {
+  console.log('Sending development error:', err.message);
+  console.log('Error stack:', err.stack);
   res.status(err.statusCode).json({
     success: false,
     error: err,
@@ -60,6 +62,9 @@ const sendErrorProd = (err, res) => {
 const errorHandler = (err, req, res, next) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || 'error';
+
+  console.log('NODE_ENV:', process.env.NODE_ENV);
+  console.log('Error occurred:', err.message);
 
   if (process.env.NODE_ENV === 'development') {
     sendErrorDev(err, res);

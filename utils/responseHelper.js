@@ -27,12 +27,13 @@ const responseHelper = {
     });
   },
 
-  paginated: (res, data, pagination, message = 'Data fetched successfully') => {
+  paginated: (res, data, pagination, message = 'Data fetched successfully', extraData = {}) => {
     return res.status(200).json({
       success: true,
       message,
       data,
       pagination,
+      ...extraData,
       timestamp: new Date().toISOString()
     });
   }

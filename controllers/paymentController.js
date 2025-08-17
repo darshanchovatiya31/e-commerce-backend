@@ -26,7 +26,10 @@ exports.createOrder = [
       };
 
       // const order = await razorpay.orders.create(options);
-      // res.json(order);
+      // return res.json(order);
+
+      // Temporary response to avoid hanging when Razorpay is not configured
+      return res.status(501).json({ message: 'Payment not implemented' });
     } catch (error) {
       next(error);
     }

@@ -126,8 +126,9 @@ const productValidators = {
     
     query('category')
       .optional()
-      .isMongoId()
-      .withMessage('Please provide a valid category ID'),
+      .trim()
+      .isLength({ min: 1, max: 100 })
+      .withMessage('Category must be between 1 and 100 characters'),
     
     query('sort')
       .optional()

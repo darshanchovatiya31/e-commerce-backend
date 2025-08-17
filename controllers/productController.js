@@ -1,18 +1,41 @@
 const { validationResult } = require('express-validator');
 const Product = require('../models/Product');
+const Category = require('../models/Category');
 const responseHelper = require('../utils/responseHelper');
 const RESPONSE_MESSAGES = require('../constants/responseMessages');
 const productValidators = require('../validators/productValidators');
 
-// Get all products with filtering, sorting, and pagination
-exports.getProducts = [
-  ...productValidators.getProducts,
-  async (req, res, next) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return responseHelper.validationError(res, errors);
+// Middleware to convert category slug to ID
+const convertCategorySlugToId = async (req, res, next) => {
+  try {
+    console.log('Middleware called with category:', req.query.category);
+    if (req.query.category) {
+      // Check if it's already a MongoDB ID
+      const mongoIdRegex = /^[0-9a-fA-F]{24}$/;
+      if (!mongoIdRegex.test(req.query.category)) {
+        console.log('Converting slug to ID:', req.query.category);
+        // It's a slug, convert to ID
+        const categoryDoc = await Category.findOne({ slug: req.query.category });
+        if (categoryDoc) {
+          console.log('Found category:', categoryDoc._id);
+          req.query.category = categoryDoc._id.toString();
+        } else {
+          console.log('Category not found, removing from query');
+          // Invalid category slug, remove it from query
+          delete req.query.category;
+        }
       }
+    }
+    next();
+  } catch (error) {
+    console.error('Middleware error:', error);
+    next(error);
+  }
+};
+
+// Get all products with filtering, sorting, and pagination
+exports.getProducts = async (req, res, next) => {
+  try {
 
       const { 
         page = 1, 
@@ -21,13 +44,29 @@ exports.getProducts = [
         sort = '-createdAt',
         search,
         minPrice,
-        maxPrice
+        maxPrice,
+        featured,
+        onSale
       } = req.query;
 
       // Build query object
-      const queryObj = { isActive: true };
+      const queryObj = { inStock: true };
       
-      if (category) queryObj.category = category;
+      // Handle category filtering by slug or ID
+      if (category) {
+        const mongoIdRegex = /^[0-9a-fA-F]{24}$/;
+        if (mongoIdRegex.test(category)) {
+          // It's already a MongoDB ID
+          queryObj.category = category;
+        } else {
+          // It's a slug, convert to ID
+          const categoryDoc = await Category.findOne({ slug: category });
+          if (categoryDoc) {
+            queryObj.category = categoryDoc._id;
+          }
+          // If category not found, don't add to query (will return no results)
+        }
+      }
       
       if (search) {
         queryObj.$or = [
@@ -41,6 +80,18 @@ exports.getProducts = [
         queryObj.price = {};
         if (minPrice) queryObj.price.$gte = parseFloat(minPrice);
         if (maxPrice) queryObj.price.$lte = parseFloat(maxPrice);
+      }
+
+      // Handle featured products filter
+      if (featured === 'true') {
+        queryObj.isFeatured = true;
+      }
+
+      // Handle sale/discount filter
+      if (onSale === 'true') {
+        queryObj.$expr = {
+          $lt: ['$price', '$originalPrice']
+        };
       }
 
       // Execute query with pagination
@@ -67,8 +118,93 @@ exports.getProducts = [
     } catch (error) {
       next(error);
     }
+  };
+
+// Get products for shop page (without strict validation)
+exports.getProductsForShop = async (req, res, next) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 12, 
+      category, 
+      sort = '-createdAt',
+      search,
+      minPrice,
+      maxPrice,
+      featured,
+      onSale
+    } = req.query;
+
+    // Build query object
+    const queryObj = { inStock: true };
+    
+    // Handle category filtering by slug or ID
+    if (category) {
+      const mongoIdRegex = /^[0-9a-fA-F]{24}$/;
+      if (mongoIdRegex.test(category)) {
+        // It's already a MongoDB ID
+        queryObj.category = category;
+      } else {
+        // It's a slug, convert to ID
+        const categoryDoc = await Category.findOne({ slug: category });
+        if (categoryDoc) {
+          queryObj.category = categoryDoc._id;
+        }
+        // If category not found, don't add to query (will return no results)
+      }
+    }
+    
+    if (search) {
+      queryObj.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } }
+      ];
+    }
+
+    if (minPrice || maxPrice) {
+      queryObj.price = {};
+      if (minPrice) queryObj.price.$gte = parseFloat(minPrice);
+      if (maxPrice) queryObj.price.$lte = parseFloat(maxPrice);
+    }
+
+    // Handle featured products filter
+    if (featured === 'true') {
+      queryObj.isFeatured = true;
+    }
+
+    // Handle sale/discount filter
+    if (onSale === 'true') {
+      queryObj.$expr = {
+        $lt: ['$price', '$originalPrice']
+      };
+    }
+
+    // Execute query with pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const products = await Product.find(queryObj)
+      .populate('category', 'name slug')
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    const total = await Product.countDocuments(queryObj);
+    
+    const pagination = {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total,
+      pages: Math.ceil(total / parseInt(limit)),
+      hasNext: parseInt(page) < Math.ceil(total / parseInt(limit)),
+      hasPrev: parseInt(page) > 1
+    };
+
+    responseHelper.paginated(res, products, pagination, RESPONSE_MESSAGES.PRODUCT.FETCH_SUCCESS);
+  } catch (error) {
+    next(error);
   }
-];
+};
 
 // Get single product by ID
 exports.getProduct = [
@@ -159,7 +295,7 @@ exports.updateProduct = [
   }
 ];
 
-// Delete product (Admin only) - Soft delete
+// Delete product (Admin only) - Hard delete
 exports.deleteProduct = [
   ...productValidators.deleteProduct,
   async (req, res, next) => {
@@ -174,11 +310,8 @@ exports.deleteProduct = [
         return responseHelper.error(res, RESPONSE_MESSAGES.PRODUCT.NOT_FOUND, 404);
       }
 
-      // Soft delete
-      product.isActive = false;
-      product.deletedBy = req.user._id;
-      product.deletedAt = new Date();
-      await product.save();
+      // Hard delete - actually remove from database
+      await Product.findByIdAndDelete(req.params.id);
 
       responseHelper.success(res, null, RESPONSE_MESSAGES.PRODUCT.DELETED);
     } catch (error) {
@@ -311,3 +444,143 @@ exports.searchProducts = async (req, res, next) => {
     next(error);
   }
 };
+
+// Get all products for admin (including inactive ones)
+exports.getAllProductsAdmin = [
+  ...productValidators.getProducts,
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return responseHelper.validationError(res, errors);
+      }
+
+      const { 
+        page = 1, 
+        limit = 12, 
+        category, 
+        sort = '-createdAt',
+        search,
+        minPrice,
+        maxPrice,
+        status = 'all' // all, active, inactive
+      } = req.query;
+
+      // Build query object (don't filter by isActive for admin)
+      const queryObj = {};
+      
+      if (category && category !== 'all') queryObj.category = category;
+      
+      if (status === 'active') queryObj.isActive = true;
+      else if (status === 'inactive') queryObj.isActive = false;
+      
+      if (search) {
+        queryObj.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
+          { tags: { $in: [new RegExp(search, 'i')] } }
+        ];
+      }
+
+      if (minPrice || maxPrice) {
+        queryObj.price = {};
+        if (minPrice) queryObj.price.$gte = parseFloat(minPrice);
+        if (maxPrice) queryObj.price.$lte = parseFloat(maxPrice);
+      }
+
+      // Execute query with pagination
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      const products = await Product.find(queryObj)
+        .populate('category', 'name slug')
+        .populate('createdBy', 'firstName lastName')
+        .populate('updatedBy', 'firstName lastName')
+        .sort(sort)
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean();
+
+      const total = await Product.countDocuments(queryObj);
+      
+      const pagination = {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit)),
+        hasNext: parseInt(page) < Math.ceil(total / parseInt(limit)),
+        hasPrev: parseInt(page) > 1
+      };
+
+      // Add statistics
+      const stats = {
+        total: await Product.countDocuments({}),
+        active: await Product.countDocuments({ isActive: true }),
+        inactive: await Product.countDocuments({ isActive: false }),
+        featured: await Product.countDocuments({ isFeatured: true, isActive: true }),
+        outOfStock: await Product.countDocuments({ inStock: false }),
+        lowStock: await Product.countDocuments({ stock: { $lte: 10, $gt: 0 } })
+      };
+
+      responseHelper.paginated(res, products, pagination, RESPONSE_MESSAGES.PRODUCT.FETCH_SUCCESS, { stats });
+    } catch (error) {
+      next(error);
+    }
+  }
+];
+
+// Toggle product status (active/inactive)
+exports.toggleProductStatus = [
+  ...productValidators.getProduct,
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return responseHelper.validationError(res, errors);
+      }
+
+      const product = await Product.findById(req.params.id);
+      if (!product) {
+        return responseHelper.error(res, RESPONSE_MESSAGES.PRODUCT.NOT_FOUND, 404);
+      }
+
+      product.isActive = !product.isActive;
+      product.updatedBy = req.user._id;
+      await product.save();
+
+      const updatedProduct = await Product.findById(product._id)
+        .populate('category', 'name slug');
+
+      responseHelper.success(res, updatedProduct, `Product ${product.isActive ? 'activated' : 'deactivated'} successfully`);
+    } catch (error) {
+      next(error);
+    }
+  }
+];
+
+// Toggle featured status
+exports.toggleFeatured = [
+  ...productValidators.getProduct,
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return responseHelper.validationError(res, errors);
+      }
+
+      const product = await Product.findById(req.params.id);
+      if (!product) {
+        return responseHelper.error(res, RESPONSE_MESSAGES.PRODUCT.NOT_FOUND, 404);
+      }
+
+      product.isFeatured = !product.isFeatured;
+      product.updatedBy = req.user._id;
+      await product.save();
+
+      const updatedProduct = await Product.findById(product._id)
+        .populate('category', 'name slug');
+
+      responseHelper.success(res, updatedProduct, `Product ${product.isFeatured ? 'marked as featured' : 'removed from featured'}`);
+    } catch (error) {
+      next(error);
+    }
+  }
+];
