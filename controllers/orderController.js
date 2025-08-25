@@ -154,9 +154,38 @@ exports.createOrder = [
       // Populate order for response
       const populatedOrder = await Order.findById(order._id)
         .populate('userId', 'firstName lastName email')
-        .populate('items.productId', 'name images');
+        .populate('items.productId', 'name images price');
 
-      responseHelper.success(res, populatedOrder, 'Order created successfully', 201);
+      // Map to client-expected shape
+      const mappedOrder = (() => {
+        const o = populatedOrder.toObject();
+        return {
+          ...o,
+          userId: (o.userId && (o.userId._id || o.userId).toString()) || undefined,
+          items: o.items.map((it) => {
+            const p = it.productId;
+            const product = p && typeof p === 'object'
+              ? {
+                  _id: (p._id || p).toString(),
+                  name: p.name,
+                  images: p.images || [],
+                  price: p.price ?? it.price,
+                }
+              : {
+                  _id: (it.productId || '').toString(),
+                  name: it.name,
+                  images: it.image ? [it.image] : [],
+                  price: it.price,
+                };
+            return {
+              ...it,
+              productId: product,
+            };
+          }),
+        };
+      })();
+
+      responseHelper.success(res, mappedOrder, 'Order created successfully', 201);
     } catch (error) {
       next(error);
     }

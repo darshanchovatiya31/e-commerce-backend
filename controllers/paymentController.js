@@ -16,36 +16,57 @@ exports.createOrder = [
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid payment request',
+          errors: errors.array(),
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Ensure Razorpay credentials are configured
+      if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+        return res.status(500).json({
+          success: false,
+          message: 'Razorpay credentials are not configured',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const amountRupees = Number(req.body.amount);
+      if (!Number.isFinite(amountRupees) || amountRupees <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid amount',
+          timestamp: new Date().toISOString(),
+        });
       }
 
       const options = {
-        amount: req.body.amount * 100, // Convert to paise
+        amount: Math.round(amountRupees * 100), // Convert to paise and ensure integer
         currency: req.body.currency,
         receipt: `order_${Date.now()}`
       };
 
       const order = await razorpay.orders.create(options);
 
-      // Save a placeholder Order doc with pending status (optional: link later)
-      await Order.create({
-        orderId: order.id,
-        userId: req.user._id,
-        items: [], // will be filled when actual order is created in orderController
-        shippingAddress: req.body.shippingAddress || undefined,
-        billingAddress: req.body.billingAddress || req.body.shippingAddress || undefined,
-        paymentMethod: 'razorpay',
-        paymentStatus: 'pending',
-        orderStatus: 'pending',
-        subtotal: req.body.amount,
-        tax: 0,
-        shipping: 0,
-        total: req.body.amount
-      }).catch(() => {});
-
-      return res.json(order);
+      return res.status(200).json({
+        success: true,
+        message: 'Razorpay order created',
+        data: order,
+        timestamp: new Date().toISOString(),
+      });
     } catch (error) {
-      next(error);
+      // Log full error for debugging
+      console.error('Razorpay create order failed:', error);
+      const msg = (error && error.error && (error.error.description || error.error.reason))
+        || error?.message
+        || 'Failed to create payment order ';
+      return res.status(500).json({
+        success: false,
+        message: msg,
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 ];
@@ -58,7 +79,12 @@ exports.verifyPayment = [
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid payment verification payload',
+          errors: errors.array(),
+          timestamp: new Date().toISOString(),
+        });
       }
 
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
@@ -69,17 +95,28 @@ exports.verifyPayment = [
         .digest('hex');
 
       if (expectedSignature === razorpay_signature) {
-        // Update order payment status
         await Order.findOneAndUpdate(
           { orderId: razorpay_order_id },
-          { paymentStatus: 'completed' }
+          { paymentStatus: 'paid' }
         );
-        res.json({ status: 'success' });
+        return res.status(200).json({
+          success: true,
+          message: 'Payment verified',
+          timestamp: new Date().toISOString(),
+        });
       } else {
-        res.status(400).json({ error: 'Invalid signature' });
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid signature',
+          timestamp: new Date().toISOString(),
+        });
       }
     } catch (error) {
-      next(error);
+      return res.status(500).json({
+        success: false,
+        message: error?.message || 'Payment verification failed',
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 ];

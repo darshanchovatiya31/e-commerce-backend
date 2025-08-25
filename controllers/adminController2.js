@@ -69,6 +69,33 @@ exports.getCustomers = async (req, res) => {
       User.countDocuments(query)
     ]);
 
+    // Collect stats for these customers
+    const userIds = customers.map((c) => c._id);
+    const statsAgg = await Order.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      {
+        $group: {
+          _id: '$userId',
+          orderCount: { $sum: 1 },
+          totalSpent: { $sum: '$total' },
+          lastOrderDate: { $max: '$createdAt' },
+        },
+      },
+    ]);
+    const statsMap = new Map(statsAgg.map((s) => [s._id.toString(), s]));
+
+    const customersWithStats = customers.map((c) => {
+      const st = statsMap.get(c._id.toString());
+      return {
+        ...c.toObject(),
+        stats: {
+          orderCount: st?.orderCount || 0,
+          totalSpent: st?.totalSpent || 0,
+          lastOrderDate: st?.lastOrderDate || null,
+        },
+      };
+    });
+
     const totalPages = Math.ceil(totalCustomers / parseInt(limit));
 
     const pagination = {
@@ -77,10 +104,14 @@ exports.getCustomers = async (req, res) => {
       total: totalCustomers,
       pages: totalPages,
       hasNext: parseInt(page) < totalPages,
-      hasPrev: parseInt(page) > 1
+      hasPrev: parseInt(page) > 1,
     };
 
-    return responseHelper.paginated(res, { customers }, pagination, 'Customers fetched successfully');
+    return responseHelper.success(
+      res,
+      { customers: customersWithStats, pagination },
+      'Customers fetched successfully'
+    );
   } catch (error) {
     console.error('Customers error:', error);
     return responseHelper.error(res, error.message, 500);
@@ -261,7 +292,34 @@ exports.updateUserStatus = async (req, res) => {
       return responseHelper.error(res, 'User not found', 404);
     }
 
-    return responseHelper.success(res, user, `User ${isActive ? 'activated' : 'deactivated'} successfully`);
+    // Attach stats like in getCustomers for consistency with frontend schema
+    const statsAgg = await Order.aggregate([
+      { $match: { userId: user._id } },
+      {
+        $group: {
+          _id: '$userId',
+          orderCount: { $sum: 1 },
+          totalSpent: { $sum: '$total' },
+          lastOrderDate: { $max: '$createdAt' },
+        },
+      },
+    ]);
+    const st = statsAgg[0];
+
+    const userWithStats = {
+      ...user.toObject(),
+      stats: {
+        orderCount: st?.orderCount || 0,
+        totalSpent: st?.totalSpent || 0,
+        lastOrderDate: st?.lastOrderDate || null,
+      },
+    };
+
+    return responseHelper.success(
+      res,
+      userWithStats,
+      `User ${isActive ? 'activated' : 'deactivated'} successfully`
+    );
   } catch (error) {
     console.error('Update user status error:', error);
     return responseHelper.error(res, error.message, 500);
