@@ -1,3 +1,6 @@
+const dotenv = require('dotenv');
+dotenv.config();
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -5,7 +8,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const swaggerUi = require('swagger-ui-express');
 const winston = require('winston');
-const dotenv = require('dotenv');
+
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const categoryRoutes = require('./routes/categories');
@@ -19,7 +22,6 @@ const uploadRoutes = require('./routes/upload');
 const shopRoutes = require('./routes/shop');
 const { errorHandler } = require('./middleware/errorHandler');
 
-dotenv.config();
 const app = express();
 
 // Logger setup

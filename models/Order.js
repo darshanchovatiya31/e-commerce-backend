@@ -117,8 +117,12 @@ const orderSchema = new mongoose.Schema({
   },
   userId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true 
+    ref: 'User'
+  },
+  guest: {
+    name: { type: String, trim: true },
+    email: { type: String, trim: true },
+    phone: { type: String, trim: true }
   },
   items: [orderItemSchema],
   shippingAddress: {
@@ -144,6 +148,7 @@ const orderSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  razorpayOrderId: { type: String, trim: true },
   orderStatus: { 
     type: String, 
     enum: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'], 

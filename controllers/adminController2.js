@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
+const Order = require('../models/Order');
 const responseHelper = require('../utils/responseHelper');
 
 // Get dashboard statistics
@@ -132,19 +133,92 @@ exports.getProducts = async (req, res) => {
   }
 };
 
-// Get orders (simplified)
+// Get orders (admin)
 exports.getOrders = async (req, res) => {
   try {
+    const {
+      page = 1,
+      limit = 10,
+      status = 'all',
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      search = ''
+    } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const filter = {};
+    if (status !== 'all') {
+      filter.orderStatus = status;
+    }
+
+    // Search by user name or email
+    const userMatch = [];
+    if (search) {
+      userMatch.push({ 'userId.firstName': { $regex: search, $options: 'i' } });
+      userMatch.push({ 'userId.lastName': { $regex: search, $options: 'i' } });
+      userMatch.push({ 'userId.email': { $regex: search, $options: 'i' } });
+    }
+
+    // Sorting
+    const sort = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
+
+    // Query with population for user and product fields used by frontend
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .populate('userId', 'firstName lastName email')
+        .populate('items.productId', 'name images')
+        .sort(sort)
+        .skip(skip)
+        .limit(limitNum),
+      Order.countDocuments(filter)
+    ]);
+
+    // Transform to match adminApi.AdminOrderSchema
+    const mapped = orders.map(o => ({
+      _id: o._id.toString(),
+      user: {
+        firstName: o.userId?.firstName || '',
+        lastName: o.userId?.lastName || '',
+        email: o.userId?.email || '',
+      },
+      items: o.items.map(it => ({
+        product: {
+          name: it.productId?.name || it.name,
+          images: it.productId?.images || (it.image ? [it.image] : []),
+        },
+        quantity: it.quantity,
+        price: it.price,
+      })),
+      totalAmount: o.total,
+      status: o.orderStatus,
+      shippingAddress: o.shippingAddress ? {
+        street: o.shippingAddress.address,
+        city: o.shippingAddress.city,
+        state: o.shippingAddress.state,
+        zipCode: o.shippingAddress.pincode,
+        country: o.shippingAddress.country || 'India'
+      } : undefined,
+      createdAt: o.createdAt,
+      updatedAt: o.updatedAt,
+    }));
+
     const pagination = {
-      page: 1,
-      limit: 10,
-      total: 0,
-      pages: 0,
-      hasNext: false,
-      hasPrev: false
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum),
+      hasNext: pageNum < Math.ceil(total / limitNum),
+      hasPrev: pageNum > 1,
     };
 
-    return responseHelper.paginated(res, { orders: [] }, pagination, 'Orders fetched successfully');
+    return responseHelper.success(
+      res,
+      { orders: mapped, pagination },
+      'Orders fetched successfully'
+    );
   } catch (error) {
     console.error('Orders error:', error);
     return responseHelper.error(res, error.message, 500);
@@ -194,10 +268,47 @@ exports.updateUserStatus = async (req, res) => {
   }
 };
 
-// Update order status (placeholder)
+// Update order status (admin)
 exports.updateOrderStatus = async (req, res) => {
   try {
-    return responseHelper.success(res, null, 'Order status update not implemented yet');
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const allowed = ['pending','confirmed','processing','shipped','delivered','cancelled','returned'];
+    if (!allowed.includes(status)) {
+      return responseHelper.error(res, 'Invalid status', 400);
+    }
+
+    const order = await Order.findById(id).populate('items.productId', 'name images').populate('userId', 'firstName lastName email');
+    if (!order) {
+      return responseHelper.error(res, 'Order not found', 404);
+    }
+
+    order.orderStatus = status;
+    await order.save();
+
+    const mapped = {
+      _id: order._id.toString(),
+      user: {
+        firstName: order.userId?.firstName || '',
+        lastName: order.userId?.lastName || '',
+        email: order.userId?.email || '',
+      },
+      items: order.items.map(it => ({
+        product: {
+          name: it.productId?.name || it.name,
+          images: it.productId?.images || (it.image ? [it.image] : []),
+        },
+        quantity: it.quantity,
+        price: it.price,
+      })),
+      totalAmount: order.total,
+      status: order.orderStatus,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+    };
+
+    return responseHelper.success(res, mapped, 'Order status updated successfully');
   } catch (error) {
     console.error('Update order status error:', error);
     return responseHelper.error(res, error.message, 500);

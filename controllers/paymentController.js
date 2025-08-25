@@ -4,10 +4,10 @@ const Order = require('../models/Order');
 const { body, validationResult } = require('express-validator');
 const { sendEmail } = require('../utils/email');
 
-// const razorpay = new Razorpay({
-//   key_id: process.env.RAZORPAY_KEY_ID,
-//   key_secret: process.env.RAZORPAY_KEY_SECRET
-// });
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+});
 
 exports.createOrder = [
   body('amount').isFloat({ min: 1 }),
@@ -25,11 +25,25 @@ exports.createOrder = [
         receipt: `order_${Date.now()}`
       };
 
-      // const order = await razorpay.orders.create(options);
-      // return res.json(order);
+      const order = await razorpay.orders.create(options);
 
-      // Temporary response to avoid hanging when Razorpay is not configured
-      return res.status(501).json({ message: 'Payment not implemented' });
+      // Save a placeholder Order doc with pending status (optional: link later)
+      await Order.create({
+        orderId: order.id,
+        userId: req.user._id,
+        items: [], // will be filled when actual order is created in orderController
+        shippingAddress: req.body.shippingAddress || undefined,
+        billingAddress: req.body.billingAddress || req.body.shippingAddress || undefined,
+        paymentMethod: 'razorpay',
+        paymentStatus: 'pending',
+        orderStatus: 'pending',
+        subtotal: req.body.amount,
+        tax: 0,
+        shipping: 0,
+        total: req.body.amount
+      }).catch(() => {});
+
+      return res.json(order);
     } catch (error) {
       next(error);
     }
