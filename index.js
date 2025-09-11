@@ -20,6 +20,7 @@ const reviewRoutes = require('./routes/reviews');
 const adminRoutes = require('./routes/admin');
 const uploadRoutes = require('./routes/upload');
 const shopRoutes = require('./routes/shop');
+const addressRoutes = require('./routes/addresses');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -46,7 +47,7 @@ if (process.env.NODE_ENV !== 'production') {
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || 'http://localhost:8080',
   credentials: true
 }));
 app.use(express.json());
@@ -64,6 +65,9 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Health check
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'backend', time: new Date().toISOString() }));
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/shop', shopRoutes); // Shop routes (must be before products)
@@ -76,10 +80,20 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/addresses', addressRoutes);
 
 // Swagger API documentation
 const swaggerDocument = require('./swagger.json');
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// JSON 404 handler for unknown routes (avoid HTML responses)
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.originalUrl} not found`,
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Error handling middleware
 app.use(errorHandler);
