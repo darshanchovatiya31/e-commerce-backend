@@ -28,7 +28,7 @@ const seedAdvancedData = async () => {
       lastName: 'User',
       email: 'admin@samjubaa.com',
       password: 'admin123',
-      phone: '9876543210',
+      phone: '9023040062',
       role: 'admin'
     });
     await admin.save();
