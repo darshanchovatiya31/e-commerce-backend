@@ -10,8 +10,3 @@ router.post('/', contactController.create);
 router.get('/massages-get', authMiddleware, adminMiddleware, contactController.list);
 
 module.exports = router;
-
-
-
-
-
