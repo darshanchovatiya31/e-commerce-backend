@@ -65,4 +65,27 @@ exports.list = async (req, res, next) => {
   }
 };
 
+exports.updateStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
 
+    if (!['new', 'read', 'responded', 'closed'].includes(status)) {
+      return responseHelper.badRequest(res, 'Invalid status value');
+    }
+
+    const message = await Contact.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true, runValidators: true }
+    );
+
+    if (!message) {
+      return responseHelper.notFound(res, 'Message not found');
+    }
+
+    return responseHelper.success(res, message, 'Message status updated successfully');
+  } catch (err) {
+    next(err);
+  }
+};

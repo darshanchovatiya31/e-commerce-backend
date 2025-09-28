@@ -9,4 +9,6 @@ router.post('/', contactController.create);
 // Admin: list messages
 router.get('/massages-get', authMiddleware, adminMiddleware, contactController.list);
 
+router.put('/:id/status', authMiddleware, adminMiddleware, contactController.updateStatus);
+
 module.exports = router;
