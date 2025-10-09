@@ -1,4 +1,4 @@
-const { validationResult } = require('express-validator');
+const { validationResult, body, param } = require('express-validator');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
 const responseHelper = require('../utils/responseHelper');
@@ -234,7 +234,52 @@ exports.getProduct = [
 
 // Create new product (Admin only)
 exports.createProduct = [
-  ...productValidators.create,
+  body('name').notEmpty().trim().isLength({ min: 2, max: 200 }),
+  body('description').notEmpty().trim().isLength({ min: 10, max: 2000 }),
+  body('price').isFloat({ min: 0.01 }),
+  body('originalPrice').optional().isFloat({ min: 0.01 }),
+  body('category').isMongoId(),
+  body('stock').optional().isInt({ min: 0 }),
+  body('colors').optional().custom((value) => {
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed);
+      } catch {
+        return false;
+      }
+    }
+    return Array.isArray(value);
+  }),
+  body('sizes').optional().custom((value) => {
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed);
+      } catch {
+        return false;
+      }
+    }
+    return Array.isArray(value);
+  }),
+  body('tags').optional().custom((value) => {
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed);
+      } catch {
+        return false;
+      }
+    }
+    return Array.isArray(value);
+  }),
+  body('material').optional().trim().isLength({ max: 100 }),
+  body('subcategory').optional().trim().isLength({ max: 100 }),
+  body('isFeatured').optional().isBoolean(),
+  body('isNew').optional().isBoolean(),
+  body('inStock').optional().isBoolean(),
+  body('rating').optional().isFloat({ min: 0, max: 5 }),
+  body('reviewCount').optional().isInt({ min: 0 }),
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
@@ -242,8 +287,61 @@ exports.createProduct = [
         return responseHelper.validationError(res, errors);
       }
 
+      const { name, description, price, originalPrice, category, stock, material, subcategory, isFeatured, isNew, inStock } = req.body;
+      
+      // Parse JSON strings for arrays
+      let colors = [];
+      let sizes = [];
+      let tags = [];
+      
+      if (req.body.colors) {
+        try {
+          colors = typeof req.body.colors === 'string' ? JSON.parse(req.body.colors) : req.body.colors;
+        } catch (error) {
+          return responseHelper.error(res, 'Invalid colors format', 400);
+        }
+      }
+      
+      if (req.body.sizes) {
+        try {
+          sizes = typeof req.body.sizes === 'string' ? JSON.parse(req.body.sizes) : req.body.sizes;
+        } catch (error) {
+          return responseHelper.error(res, 'Invalid sizes format', 400);
+        }
+      }
+      
+      if (req.body.tags) {
+        try {
+          tags = typeof req.body.tags === 'string' ? JSON.parse(req.body.tags) : req.body.tags;
+        } catch (error) {
+          return responseHelper.error(res, 'Invalid tags format', 400);
+        }
+      }
+      
+      // Handle multiple image uploads
+      let images = [];
+      if (req.files && req.files.length > 0) {
+        images = req.files.map(file => file.path); // Cloudinary URLs from multer-storage-cloudinary
+      }
+
       const productData = {
-        ...req.body,
+        name,
+        description,
+        price: parseFloat(price),
+        originalPrice: originalPrice ? parseFloat(originalPrice) : parseFloat(price),
+        category,
+        stock: stock ? parseInt(stock) : 0,
+        colors,
+        sizes,
+        images,
+        tags,
+        material: material || '',
+        subcategory: subcategory || '',
+        isFeatured: isFeatured || false,
+        isNew: isNew !== undefined ? isNew : true,
+        inStock: inStock !== undefined ? inStock : true,
+        rating: req.body.rating ? parseFloat(req.body.rating) : 0,
+        reviewCount: req.body.reviewCount ? parseInt(req.body.reviewCount) : 0,
         createdBy: req.user._id
       };
 
@@ -262,7 +360,54 @@ exports.createProduct = [
 
 // Update product (Admin only)
 exports.updateProduct = [
-  ...productValidators.update,
+  param('id').isMongoId(),
+  body('name').optional().trim().isLength({ min: 2, max: 200 }),
+  body('description').optional().trim().isLength({ min: 10, max: 2000 }),
+  body('price').optional().isFloat({ min: 0.01 }),
+  body('originalPrice').optional().isFloat({ min: 0.01 }),
+  body('category').optional().isMongoId(),
+  body('stock').optional().isInt({ min: 0 }),
+  body('colors').optional().custom((value) => {
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed);
+      } catch {
+        return false;
+      }
+    }
+    return Array.isArray(value);
+  }),
+  body('sizes').optional().custom((value) => {
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed);
+      } catch {
+        return false;
+      }
+    }
+    return Array.isArray(value);
+  }),
+  body('tags').optional().custom((value) => {
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed);
+      } catch {
+        return false;
+      }
+    }
+    return Array.isArray(value);
+  }),
+  body('material').optional().trim().isLength({ max: 100 }),
+  body('subcategory').optional().trim().isLength({ max: 100 }),
+  body('isFeatured').optional().isBoolean(),
+  body('isNew').optional().isBoolean(),
+  body('inStock').optional().isBoolean(),
+  body('isActive').optional().isBoolean(),
+  body('rating').optional().isFloat({ min: 0, max: 5 }),
+  body('reviewCount').optional().isInt({ min: 0 }),
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
@@ -275,9 +420,40 @@ exports.updateProduct = [
         return responseHelper.error(res, RESPONSE_MESSAGES.PRODUCT.NOT_FOUND, 404);
       }
 
-      // Update product fields
+      // Handle multiple image uploads
+      if (req.files && req.files.length > 0) {
+        const newImages = req.files.map(file => file.path); // Cloudinary URLs from multer-storage-cloudinary
+        product.images = newImages;
+      }
+
+      // Parse JSON strings for arrays
+      if (req.body.colors !== undefined) {
+        try {
+          product.colors = typeof req.body.colors === 'string' ? JSON.parse(req.body.colors) : req.body.colors;
+        } catch (error) {
+          return responseHelper.error(res, 'Invalid colors format', 400);
+        }
+      }
+      
+      if (req.body.sizes !== undefined) {
+        try {
+          product.sizes = typeof req.body.sizes === 'string' ? JSON.parse(req.body.sizes) : req.body.sizes;
+        } catch (error) {
+          return responseHelper.error(res, 'Invalid sizes format', 400);
+        }
+      }
+      
+      if (req.body.tags !== undefined) {
+        try {
+          product.tags = typeof req.body.tags === 'string' ? JSON.parse(req.body.tags) : req.body.tags;
+        } catch (error) {
+          return responseHelper.error(res, 'Invalid tags format', 400);
+        }
+      }
+
+      // Update other product fields
       Object.keys(req.body).forEach(key => {
-        if (req.body[key] !== undefined) {
+        if (req.body[key] !== undefined && key !== 'images' && key !== 'colors' && key !== 'sizes' && key !== 'tags') {
           product[key] = req.body[key];
         }
       });
@@ -457,7 +633,7 @@ exports.getAllProductsAdmin = [
 
       const { 
         page = 1, 
-        limit = 12, 
+        limit = 10, 
         category, 
         sort = '-createdAt',
         search,

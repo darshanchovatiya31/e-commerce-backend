@@ -1,53 +1,49 @@
-const cloudinary = require('cloudinary').v2;
 const { body, validationResult } = require('express-validator');
-const fs = require('fs/promises');
+const responseHelper = require('../utils/responseHelper');
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-
+// Upload single image
 exports.uploadImage = async (req, res, next) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return responseHelper.error(res, 'No file uploaded', 400);
     }
 
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: 'samjubaa',
-      transformation: [{ width: 1000, height: 1000, crop: 'limit' }]
-    });
+    // With CloudinaryStorage, req.file.path contains the Cloudinary URL
+    const imageUrl = req.file.path;
 
-    // Clean up temp file
-    await fs.unlink(req.file.path).catch(() => {});
-
-    res.json({ url: result.secure_url });
+    responseHelper.success(res, { url: imageUrl }, 'Image uploaded successfully');
   } catch (error) {
     next(error);
   }
 };
 
+// Upload multiple images
 exports.uploadImages = async (req, res, next) => {
   try {
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'No files uploaded' });
+      return responseHelper.error(res, 'No files uploaded', 400);
     }
 
-    const uploadPromises = req.files.map(file =>
-      cloudinary.uploader.upload(file.path, {
-        folder: 'samjubaa',
-        transformation: [{ width: 1000, height: 1000, crop: 'limit' }]
-      })
-    );
+    // With CloudinaryStorage, req.files[].path contains the Cloudinary URLs
+    const urls = req.files.map(file => file.path);
 
-    const results = await Promise.all(uploadPromises);
-    const urls = results.map(result => result.secure_url);
+    responseHelper.success(res, { urls }, 'Images uploaded successfully');
+  } catch (error) {
+    next(error);
+  }
+};
 
-    // Clean up temp files
-    await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => {})));
+// Upload category image specifically
+exports.uploadCategoryImage = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return responseHelper.error(res, 'No image file uploaded', 400);
+    }
 
-    res.json({ urls });
+    // With CloudinaryStorage, req.file.path contains the Cloudinary URL
+    const imageUrl = req.file.path;
+
+    responseHelper.success(res, { url: imageUrl }, 'Category image uploaded successfully');
   } catch (error) {
     next(error);
   }

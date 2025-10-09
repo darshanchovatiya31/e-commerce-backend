@@ -2,22 +2,15 @@ const express = require('express');
 const router = express.Router();
 const uploadController = require('../controllers/uploadController');
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
-const multer = require('multer');
+const categoryUpload = require('../utils/categoryUpload');
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-    cb(null, allowed.includes(file.mimetype));
-  }
-});
+// Upload category image
+router.post('/category-image', authMiddleware, adminMiddleware, categoryUpload.single('image'), uploadController.uploadCategoryImage);
 
-router.post('/image', authMiddleware, adminMiddleware, upload.single('image'), uploadController.uploadImage);
-router.post('/images', authMiddleware, adminMiddleware, upload.array('images', 10), uploadController.uploadImages);
+// Upload single image (general)
+router.post('/image', authMiddleware, adminMiddleware, categoryUpload.single('image'), uploadController.uploadImage);
+
+// Upload multiple images
+router.post('/images', authMiddleware, adminMiddleware, categoryUpload.array('images', 10), uploadController.uploadImages);
 
 module.exports = router;

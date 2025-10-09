@@ -45,13 +45,7 @@ const productSchema = new mongoose.Schema({
     trim: true
   }],
   images: [{ 
-    type: String,
-    validate: {
-      validator: function(v) {
-        return /^https?:\/\/.+/.test(v);
-      },
-      message: 'Image must be a valid URL'
-    }
+    type: String
   }],
   tags: [{ 
     type: String,

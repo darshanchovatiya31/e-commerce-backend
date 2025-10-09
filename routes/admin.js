@@ -13,6 +13,7 @@ router.get('/analytics', authMiddleware, adminMiddleware, adminController.getAna
 
 // Customer Management
 router.get('/customers', authMiddleware, adminMiddleware, adminController.getCustomers);
+router.get('/customers/:customerId/orders', authMiddleware, adminMiddleware, adminController.getCustomerOrders);
 router.put('/users/:id/status', authMiddleware, adminMiddleware, adminController.updateUserStatus);
 
 // Order Management

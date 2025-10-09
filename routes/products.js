@@ -2,11 +2,12 @@ const express = require('express');
 const router = express.Router();
 const productController = require('../controllers/productController');
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const productUpload = require('../utils/productUpload'); // Import upload middleware
 
 // Admin routes (require authentication and admin role) - Must be before /:id route
 router.get('/admin/all', authMiddleware, adminMiddleware, productController.getAllProductsAdmin);
-router.post('/', authMiddleware, adminMiddleware, productController.createProduct);
-router.put('/:id', authMiddleware, adminMiddleware, productController.updateProduct);
+router.post('/', authMiddleware, adminMiddleware, productUpload.array('images', 10), productController.createProduct);
+router.put('/:id', authMiddleware, adminMiddleware, productUpload.array('images', 10), productController.updateProduct);
 router.delete('/:id', authMiddleware, adminMiddleware, productController.deleteProduct);
 router.patch('/:id/toggle-status', authMiddleware, adminMiddleware, productController.toggleProductStatus);
 router.patch('/:id/toggle-featured', authMiddleware, adminMiddleware, productController.toggleFeatured);

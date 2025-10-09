@@ -118,6 +118,34 @@ exports.getCustomers = async (req, res) => {
   }
 };
 
+// Get customer orders
+exports.getCustomerOrders = async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    
+    // Verify customer exists
+    const customer = await User.findById(customerId);
+    if (!customer) {
+      return responseHelper.error(res, 'Customer not found', 404);
+    }
+
+    // Get customer orders with populated product details
+    const orders = await Order.find({ userId: customerId })
+      .populate('items.productId', 'name images price')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return responseHelper.success(
+      res,
+      orders,
+      'Customer orders fetched successfully'
+    );
+  } catch (error) {
+    console.error('Customer orders error:', error);
+    return responseHelper.error(res, error.message, 500);
+  }
+};
+
 // Get all products
 exports.getProducts = async (req, res) => {
   try {

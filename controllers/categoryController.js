@@ -64,8 +64,17 @@ exports.getCategory = async (req, res, next) => {
 exports.createCategory = [
   body('name').notEmpty().trim().isLength({ min: 2, max: 100 }),
   body('description').optional().trim().isLength({ max: 500 }),
-  body('image').optional().trim(),
-  body('subcategories').optional().isArray(),
+  body('subcategories').optional().custom((value) => {
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed);
+      } catch {
+        return false;
+      }
+    }
+    return Array.isArray(value);
+  }),
   body('featured').optional().isBoolean(),
   body('sortOrder').optional().isInt({ min: 0 }),
   async (req, res, next) => {
@@ -75,7 +84,19 @@ exports.createCategory = [
         return responseHelper.validationError(res, errors);
       }
 
-      const { name, description, image, subcategories, featured, sortOrder } = req.body;
+      const { name, description, featured, sortOrder } = req.body;
+      
+      // Parse subcategories from JSON string if provided
+      let subcategories = [];
+      if (req.body.subcategories) {
+        try {
+          subcategories = typeof req.body.subcategories === 'string' 
+            ? JSON.parse(req.body.subcategories) 
+            : req.body.subcategories;
+        } catch (error) {
+          return responseHelper.error(res, 'Invalid subcategories format', 400);
+        }
+      }
       
       // Check if category name already exists
       const existingCategory = await Category.findOne({ name: new RegExp(`^${name}$`, 'i') });
@@ -83,11 +104,26 @@ exports.createCategory = [
         return responseHelper.error(res, 'Category name already exists', 400);
       }
 
+      // Validate subcategories if provided
+      if (subcategories && subcategories.length > 0) {
+        for (const subcategory of subcategories) {
+          if (!subcategory.name || subcategory.name.trim().length < 2) {
+            return responseHelper.error(res, 'All subcategories must have a valid name', 400);
+          }
+        }
+      }
+
+      // Handle image upload
+      let image = null;
+      if (req.file) {
+        image = req.file.path; // Cloudinary URL from multer-storage-cloudinary
+      }
+
       const category = new Category({ 
         name, 
         description, 
         image, 
-        subcategories, 
+        subcategories: subcategories || [], 
         featured: featured || false,
         sortOrder: sortOrder || 0
       });
@@ -106,8 +142,17 @@ exports.updateCategory = [
   param('id').isMongoId(),
   body('name').optional().notEmpty().trim().isLength({ min: 2, max: 100 }),
   body('description').optional().trim().isLength({ max: 500 }),
-  body('image').optional().trim(),
-  body('subcategories').optional().isArray(),
+  body('subcategories').optional().custom((value) => {
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed);
+      } catch {
+        return false;
+      }
+    }
+    return Array.isArray(value);
+  }),
   body('featured').optional().isBoolean(),
   body('sortOrder').optional().isInt({ min: 0 }),
   body('isActive').optional().isBoolean(),
@@ -119,7 +164,18 @@ exports.updateCategory = [
       }
 
       const { id } = req.params;
-      const updateData = req.body;
+      const updateData = { ...req.body };
+      
+      // Parse subcategories from JSON string if provided
+      if (updateData.subcategories) {
+        try {
+          updateData.subcategories = typeof updateData.subcategories === 'string' 
+            ? JSON.parse(updateData.subcategories) 
+            : updateData.subcategories;
+        } catch (error) {
+          return responseHelper.error(res, 'Invalid subcategories format', 400);
+        }
+      }
 
       // Check if name already exists (excluding current category)
       if (updateData.name) {
@@ -130,6 +186,20 @@ exports.updateCategory = [
         if (existingCategory) {
           return responseHelper.error(res, 'Category name already exists', 400);
         }
+      }
+
+      // Validate subcategories if provided
+      if (updateData.subcategories && updateData.subcategories.length > 0) {
+        for (const subcategory of updateData.subcategories) {
+          if (!subcategory.name || subcategory.name.trim().length < 2) {
+            return responseHelper.error(res, 'All subcategories must have a valid name', 400);
+          }
+        }
+      }
+
+      // Handle image upload
+      if (req.file) {
+        updateData.image = req.file.path; // Cloudinary URL from multer-storage-cloudinary
       }
 
       const category = await Category.findByIdAndUpdate(
