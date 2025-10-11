@@ -22,6 +22,7 @@ const uploadRoutes = require('./routes/upload');
 const shopRoutes = require('./routes/shop');
 const addressRoutes = require('./routes/addresses');
 const contactRoutes = require('./routes/contact');
+const newsletterRoutes = require('./routes/newsletter');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -83,6 +84,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/newsletter', newsletterRoutes);
 
 // Swagger API documentation
 const swaggerDocument = require('./swagger.json');
