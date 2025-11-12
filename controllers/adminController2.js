@@ -238,6 +238,7 @@ exports.getOrders = async (req, res) => {
     // Transform to match adminApi.AdminOrderSchema
     const mapped = orders.map(o => ({
       _id: o._id.toString(),
+      orderId: o.orderId || o._id.toString().slice(-8).toUpperCase(),
       user: {
         firstName: o.userId?.firstName || '',
         lastName: o.userId?.lastName || '',

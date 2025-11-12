@@ -5,7 +5,7 @@ const responseHelper = require('../utils/responseHelper');
 // Get all categories
 exports.getCategories = async (req, res, next) => {
   try {
-    const { featured, includeInactive } = req.query;
+    const { featured, includeInactive, limit, minimal } = req.query;
     
     let query = {};
     
@@ -19,9 +19,31 @@ exports.getCategories = async (req, res, next) => {
       query.featured = true;
     }
     
-    const categories = await Category.find(query)
-      .populate('productCount')
-      .sort({ sortOrder: 1, name: 1 });
+    // Select fields based on minimal flag
+    // When minimal=true, only return essential fields (name, slug, _id)
+    const isMinimal = minimal === 'true';
+    
+    let queryBuilder = Category.find(query);
+    
+    // Apply field selection if minimal
+    if (isMinimal) {
+      queryBuilder = queryBuilder.select('name slug _id');
+    } else {
+      // Only populate productCount if not minimal
+      queryBuilder = queryBuilder.populate('productCount');
+    }
+    
+    queryBuilder = queryBuilder.sort({ sortOrder: 1, createdAt: -1, name: 1 });
+    
+    // Apply limit if provided
+    if (limit) {
+      const limitNum = parseInt(limit, 10);
+      if (!isNaN(limitNum) && limitNum > 0) {
+        queryBuilder = queryBuilder.limit(limitNum);
+      }
+    }
+    
+    const categories = await queryBuilder.exec();
     
     responseHelper.success(res, categories, 'Categories fetched successfully');
   } catch (error) {

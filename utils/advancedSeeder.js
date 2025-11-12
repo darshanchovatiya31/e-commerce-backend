@@ -1,5 +1,6 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
@@ -266,8 +267,11 @@ const seedAdvancedData = async () => {
       const createdAt = new Date();
       createdAt.setDate(createdAt.getDate() - Math.floor(Math.random() * 30));
 
+      // Generate short order ID (8 characters)
+      const orderId = crypto.randomBytes(4).toString('hex').toUpperCase();
+      
       const order = {
-        orderId: `ORD${Date.now()}${i}`,
+        orderId: orderId,
         userId: customer._id,
         items: orderItems,
         shippingAddress: {

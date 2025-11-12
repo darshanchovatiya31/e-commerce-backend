@@ -2,6 +2,7 @@ const { validationResult } = require('express-validator');
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
+const User = require('../models/User');
 const { sendEmail } = require('../utils/email');
 const responseHelper = require('../utils/responseHelper');
 const RESPONSE_MESSAGES = require('../constants/responseMessages');
@@ -87,8 +88,16 @@ exports.createOrder = [
       const shipping = subtotal > 500 ? 0 : 50; // Free shipping above ₹500
       const total = subtotal - discount + tax + shipping;
 
-      // Generate unique order ID
-      const orderId = `ORD${Date.now()}${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+      // Generate unique short order ID (8 characters)
+      let orderId;
+      let isUnique = false;
+      while (!isUnique) {
+        orderId = crypto.randomBytes(4).toString('hex').toUpperCase();
+        const existingOrder = await Order.findOne({ orderId });
+        if (!existingOrder) {
+          isUnique = true;
+        }
+      }
 
       // Create order
       const order = new Order({
@@ -110,6 +119,23 @@ exports.createOrder = [
       });
 
       await order.save();
+
+      // If user has no addresses, save shipping address as default address
+      // Reload user to get fresh data
+      const user = await User.findById(req.user._id);
+      if (user && user.addresses.length === 0) {
+        user.addresses.push({
+          fullName: shippingAddress.fullName,
+          phone: shippingAddress.phone,
+          address: shippingAddress.address,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          pincode: shippingAddress.pincode,
+          country: shippingAddress.country || 'India',
+          isDefault: true,
+        });
+        await user.save();
+      }
 
       // Update product stock
       for (const item of orderItems) {
