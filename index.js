@@ -23,6 +23,7 @@ const shopRoutes = require('./routes/shop');
 const addressRoutes = require('./routes/addresses');
 const contactRoutes = require('./routes/contact');
 const newsletterRoutes = require('./routes/newsletter');
+const customerReviewRoutes = require('./routes/customerReviews');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -85,6 +86,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/customer-reviews', customerReviewRoutes);
 
 // Swagger API documentation
 const swaggerDocument = require('./swagger.json');
@@ -104,7 +106,30 @@ app.use(errorHandler);
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI)
-.then(() => logger.info('Connected to MongoDB'))
+.then(async () => {
+  logger.info('Connected to MongoDB');
+  
+  // Migrate newsletter index (drop old email index if exists)
+  try {
+    const db = mongoose.connection.db;
+    const collection = db.collection('newsletters');
+    const indexes = await collection.indexes();
+    const emailIndex = indexes.find(idx => idx.key && idx.key.email);
+    
+    if (emailIndex) {
+      try {
+        await collection.dropIndex(emailIndex.name);
+        logger.info(`✅ Dropped old email index: ${emailIndex.name}`);
+      } catch (error) {
+        if (error.code !== 27) { // 27 = IndexNotFound
+          logger.warn(`⚠️  Could not drop email index: ${error.message}`);
+        }
+      }
+    }
+  } catch (error) {
+    logger.warn('⚠️  Could not migrate newsletter index:', error.message);
+  }
+})
 .catch(err => logger.error('MongoDB connection error:', err));
 
 // Start server

@@ -7,6 +7,7 @@ const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 router.post('/', authMiddleware, orderController.createOrder);
 router.get('/', authMiddleware, orderController.getOrders);
 router.get('/:orderId', authMiddleware, orderController.getOrder);
+router.get('/:orderId/invoice', authMiddleware, orderController.getInvoice);
 router.patch('/:orderId/cancel', authMiddleware, orderController.cancelOrder);
 
 // Admin routes

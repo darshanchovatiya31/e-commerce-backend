@@ -2,11 +2,10 @@ const { body, param, query } = require('express-validator');
 
 // Newsletter subscription validation
 const subscribe = [
-  body('email')
-    .isEmail()
-    .withMessage('Please provide a valid email address')
-    .normalizeEmail()
-    .toLowerCase(),
+  body('mobileNumber')
+    .trim()
+    .matches(/^[6-9]\d{9}$/)
+    .withMessage('Please provide a valid 10-digit mobile number (starting with 6-9)'),
   
   body('firstName')
     .optional()
@@ -107,11 +106,10 @@ const subscribe = [
 
 // Newsletter unsubscribe validation
 const unsubscribe = [
-  body('email')
-    .isEmail()
-    .withMessage('Please provide a valid email address')
-    .normalizeEmail()
-    .toLowerCase()
+  body('mobileNumber')
+    .trim()
+    .matches(/^[6-9]\d{9}$/)
+    .withMessage('Please provide a valid 10-digit mobile number (starting with 6-9)')
 ];
 
 // Newsletter update validation
@@ -205,8 +203,8 @@ const list = [
   
   query('sortBy')
     .optional()
-    .isIn(['email', 'firstName', 'lastName', 'subscribedAt', 'emailCount'])
-    .withMessage('Sort by must be email, firstName, lastName, subscribedAt, or emailCount'),
+    .isIn(['mobileNumber', 'firstName', 'lastName', 'subscribedAt', 'emailCount'])
+    .withMessage('Sort by must be mobileNumber, firstName, lastName, subscribedAt, or emailCount'),
   
   query('sortOrder')
     .optional()
@@ -247,7 +245,7 @@ const exportData = [
           throw new Error('Fields must be an array or comma-separated string');
         }
         
-        const validFields = ['email', 'firstName', 'lastName', 'status', 'subscribedAt', 'preferences', 'tags'];
+        const validFields = ['mobileNumber', 'firstName', 'lastName', 'status', 'subscribedAt', 'preferences', 'tags'];
         for (const field of fields) {
           if (!validFields.includes(field)) {
             throw new Error(`Invalid field name: ${field}`);

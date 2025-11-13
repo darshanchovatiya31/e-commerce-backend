@@ -11,10 +11,10 @@ exports.subscribe = async (req, res, next) => {
       return responseHelper.validationError(res, errors);
     }
 
-    const { email, firstName, lastName, preferences, tags, metadata } = req.body;
+    const { mobileNumber, firstName, lastName, preferences, tags, metadata } = req.body;
 
-    // Check if email already exists
-    const existingSubscriber = await Newsletter.findByEmail(email);
+    // Check if mobile number already exists
+    const existingSubscriber = await Newsletter.findByMobileNumber(mobileNumber);
     if (existingSubscriber) {
       if (existingSubscriber.status === 'unsubscribed') {
         // Resubscribe the user
@@ -43,13 +43,13 @@ exports.subscribe = async (req, res, next) => {
           message: 'Successfully resubscribed to newsletter'
         }, 'Welcome back! You have been resubscribed to our newsletter.', 200);
       } else {
-        return responseHelper.error(res, 'Email is already subscribed to newsletter', 400);
+        return responseHelper.error(res, 'Mobile number is already subscribed to newsletter', 400);
       }
     }
 
     // Create new subscriber
     const subscriber = new Newsletter({
-      email,
+      mobileNumber,
       firstName,
       lastName,
       preferences: preferences || {
@@ -69,19 +69,19 @@ exports.subscribe = async (req, res, next) => {
 
     await subscriber.save();
 
-    // Send welcome email (optional)
+    // Send welcome SMS (optional)
     try {
-      // TODO: Implement welcome email sending
-      console.log(`Welcome email sent to: ${email}`);
-    } catch (emailError) {
-      console.error('Welcome email failed:', emailError);
-      // Don't fail subscription if email fails
+      // TODO: Implement welcome SMS sending
+      console.log(`Welcome SMS sent to: ${mobileNumber}`);
+    } catch (smsError) {
+      console.error('Welcome SMS failed:', smsError);
+      // Don't fail subscription if SMS fails
     }
 
     responseHelper.success(res, {
       subscriber: {
         id: subscriber._id,
-        email: subscriber.email,
+        mobileNumber: subscriber.mobileNumber,
         firstName: subscriber.firstName,
         lastName: subscriber.lastName,
         status: subscriber.status,
@@ -103,15 +103,15 @@ exports.unsubscribe = async (req, res, next) => {
       return responseHelper.validationError(res, errors);
     }
 
-    const { email } = req.body;
+    const { mobileNumber } = req.body;
 
-    const subscriber = await Newsletter.findByEmail(email);
+    const subscriber = await Newsletter.findByMobileNumber(mobileNumber);
     if (!subscriber) {
-      return responseHelper.error(res, 'Email not found in newsletter subscribers', 404);
+      return responseHelper.error(res, 'Mobile number not found in newsletter subscribers', 404);
     }
 
     if (subscriber.status === 'unsubscribed') {
-      return responseHelper.error(res, 'Email is already unsubscribed', 400);
+      return responseHelper.error(res, 'Mobile number is already unsubscribed', 400);
     }
 
     await subscriber.unsubscribe();
@@ -151,7 +151,7 @@ exports.getSubscribers = async (req, res, next) => {
 
     if (search) {
       query.$or = [
-        { email: { $regex: search, $options: 'i' } },
+        { mobileNumber: { $regex: search, $options: 'i' } },
         { firstName: { $regex: search, $options: 'i' } },
         { lastName: { $regex: search, $options: 'i' } }
       ];
@@ -341,7 +341,7 @@ exports.updateSubscriber = async (req, res, next) => {
     responseHelper.success(res, {
       subscriber: {
         id: subscriber._id,
-        email: subscriber.email,
+        mobileNumber: subscriber.mobileNumber,
         firstName: subscriber.firstName,
         lastName: subscriber.lastName,
         status: subscriber.status,
@@ -390,7 +390,7 @@ exports.exportSubscribers = async (req, res, next) => {
     const {
       format = 'csv',
       status = 'all',
-      fields = ['email', 'firstName', 'lastName', 'status', 'subscribedAt']
+      fields = ['mobileNumber', 'firstName', 'lastName', 'status', 'subscribedAt']
     } = req.query;
 
     // Handle fields parameter - convert string to array if needed

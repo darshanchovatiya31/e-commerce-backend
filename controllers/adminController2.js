@@ -233,6 +233,94 @@ exports.getDashboardStats = async (req, res) => {
   }
 };
 
+// Export all customers to CSV
+exports.exportCustomers = async (req, res) => {
+  try {
+    // Get all customers without pagination
+    let query = { role: 'customer' };
+    
+    const customers = await User.find(query)
+      .select('-password -refreshTokens')
+      .sort({ createdAt: -1 });
+
+    // Collect stats for all customers
+    const userIds = customers.map((c) => c._id);
+    const statsAgg = await Order.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      {
+        $group: {
+          _id: '$userId',
+          orderCount: { $sum: 1 },
+          totalSpent: { $sum: '$total' },
+          lastOrderDate: { $max: '$createdAt' },
+        },
+      },
+    ]);
+    const statsMap = new Map(statsAgg.map((s) => [s._id.toString(), s]));
+
+    // CSV Headers
+    const headers = [
+      'Customer ID',
+      'First Name',
+      'Last Name',
+      'Email',
+      'Phone',
+      'Status',
+      'Total Orders',
+      'Total Spent (₹)',
+      'Last Order Date',
+      'Joined Date',
+      'Gender',
+      'Date of Birth'
+    ];
+
+    // Prepare CSV rows
+    const csvRows = customers.map((c) => {
+      const st = statsMap.get(c._id.toString());
+      return [
+        c._id.toString(),
+        c.firstName || '',
+        c.lastName || '',
+        c.email || '',
+        c.phone || '',
+        c.isActive ? 'Active' : 'Inactive',
+        st?.orderCount || 0,
+        st?.totalSpent || 0,
+        st?.lastOrderDate ? new Date(st.lastOrderDate).toLocaleDateString() : 'N/A',
+        c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '',
+        c.gender || 'N/A',
+        c.dateOfBirth ? new Date(c.dateOfBirth).toLocaleDateString() : 'N/A'
+      ];
+    });
+
+    // Escape CSV values (handle commas, quotes, newlines)
+    const escapeCsvValue = (value) => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value);
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    // Build CSV content
+    const csvContent = [
+      headers.map(escapeCsvValue).join(','),
+      ...csvRows.map(row => row.map(escapeCsvValue).join(','))
+    ].join('\n');
+
+    // Set headers for CSV download
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=customers-export-${new Date().toISOString().split('T')[0]}.csv`);
+    
+    // Add BOM for Excel compatibility with special characters and send the CSV file
+    res.send('\ufeff' + csvContent);
+  } catch (error) {
+    console.error('Export customers error:', error);
+    return responseHelper.error(res, error.message, 500);
+  }
+};
+
 // Get all customers
 exports.getCustomers = async (req, res) => {
   try {

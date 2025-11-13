@@ -1,13 +1,12 @@
 const mongoose = require('mongoose');
 
 const newsletterSchema = new mongoose.Schema({
-  email: {
+  mobileNumber: {
     type: String,
     required: true,
     unique: true,
-    lowercase: true,
     trim: true,
-    match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    match: /^[6-9]\d{9}$/
   },
   firstName: {
     type: String,
@@ -87,11 +86,15 @@ const newsletterSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-newsletterSchema.index({ email: 1 });
+newsletterSchema.index({ mobileNumber: 1 });
 newsletterSchema.index({ status: 1 });
 newsletterSchema.index({ subscribedAt: -1 });
 newsletterSchema.index({ isActive: 1 });
 newsletterSchema.index({ tags: 1 });
+
+// Note: If you're getting E11000 duplicate key error for email index,
+// run: npm run migrate:newsletter
+// This will drop the old email index from the database
 
 // Virtual for full name
 newsletterSchema.virtual('fullName').get(function() {
@@ -106,8 +109,8 @@ newsletterSchema.statics.findActiveSubscribers = function() {
   return this.find({ status: 'active', isActive: true });
 };
 
-newsletterSchema.statics.findByEmail = function(email) {
-  return this.findOne({ email: email.toLowerCase(), isActive: true });
+newsletterSchema.statics.findByMobileNumber = function(mobileNumber) {
+  return this.findOne({ mobileNumber: mobileNumber.trim(), isActive: true });
 };
 
 newsletterSchema.statics.getSubscriberStats = function() {
@@ -154,9 +157,9 @@ newsletterSchema.methods.removeTag = function(tag) {
 
 // Pre-save middleware
 newsletterSchema.pre('save', function(next) {
-  // Ensure email is lowercase
-  if (this.isModified('email')) {
-    this.email = this.email.toLowerCase();
+  // Ensure mobileNumber is trimmed
+  if (this.isModified('mobileNumber')) {
+    this.mobileNumber = this.mobileNumber.trim();
   }
   
   // Update timestamps based on status changes

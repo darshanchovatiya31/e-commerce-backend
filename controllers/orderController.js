@@ -547,3 +547,70 @@ exports.updatePaymentStatus = [
     }
   }
 ];
+
+// Get invoice data for an order
+exports.getInvoice = [
+  async (req, res, next) => {
+    try {
+      const { orderId } = req.params;
+      
+      const order = await Order.findById(orderId)
+        .populate('userId', 'firstName lastName email phone')
+        .populate('items.productId', 'name images');
+
+      if (!order) {
+        return responseHelper.error(res, 'Order not found', 404);
+      }
+
+      // Check if user has access (either the order owner or admin)
+      const isAdmin = req.user && req.user.role === 'admin';
+      const isOrderOwner = req.user && order.userId && order.userId._id.toString() === req.user._id.toString();
+      
+      if (!isAdmin && !isOrderOwner) {
+        return responseHelper.error(res, 'Unauthorized access', 403);
+      }
+
+      // Format invoice data
+      const invoiceData = {
+        invoiceNumber: order.orderId,
+        orderDate: order.createdAt,
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
+        paymentMethod: order.paymentMethod,
+        customer: order.userId ? {
+          name: `${order.userId.firstName} ${order.userId.lastName}`,
+          email: order.userId.email,
+          phone: order.userId.phone || order.shippingAddress.phone,
+        } : {
+          name: order.guest?.name || order.shippingAddress.fullName,
+          email: order.guest?.email || '',
+          phone: order.guest?.phone || order.shippingAddress.phone,
+        },
+        shippingAddress: order.shippingAddress,
+        billingAddress: order.billingAddress || order.shippingAddress,
+        items: order.items.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          originalPrice: item.originalPrice,
+          total: item.price * item.quantity,
+          size: item.selectedSize,
+          color: item.selectedColor,
+          image: item.image,
+        })),
+        subtotal: order.subtotal,
+        discount: order.discount,
+        tax: order.tax,
+        shipping: order.shipping,
+        total: order.total,
+        couponCode: order.couponCode,
+        trackingNumber: order.trackingNumber,
+        estimatedDelivery: order.estimatedDelivery,
+      };
+
+      responseHelper.success(res, invoiceData, 'Invoice data fetched successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+];
