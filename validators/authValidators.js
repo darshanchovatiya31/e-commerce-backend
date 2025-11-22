@@ -59,6 +59,22 @@ const authValidators = {
       .normalizeEmail()
   ],
 
+  verifyOTP: [
+    body('email')
+      .isEmail()
+      .withMessage('Please provide a valid email')
+      .normalizeEmail(),
+    
+    body('otp')
+      .trim()
+      .notEmpty()
+      .withMessage('OTP is required')
+      .isLength({ min: 6, max: 6 })
+      .withMessage('OTP must be 6 digits')
+      .isNumeric()
+      .withMessage('OTP must contain only numbers')
+  ],
+
   resetPassword: [
     body('token')
       .notEmpty()

@@ -135,6 +135,12 @@ const userSchema = new mongoose.Schema({
   passwordResetExpires: {
     type: Date
   },
+  passwordResetOTP: {
+    type: String
+  },
+  passwordResetOTPExpires: {
+    type: Date
+  },
   isActive: { 
     type: Boolean, 
     default: true 
@@ -264,6 +270,8 @@ userSchema.methods.toJSON = function() {
   delete user.emailVerificationToken;
   delete user.passwordResetToken;
   delete user.passwordResetExpires;
+  delete user.passwordResetOTP;
+  delete user.passwordResetOTPExpires;
   return user;
 };
 

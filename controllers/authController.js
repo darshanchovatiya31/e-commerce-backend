@@ -115,7 +115,7 @@ exports.login = [
   }
 ];
 
-// Forgot password
+// Forgot password - Send OTP
 exports.forgotPassword = [
   ...authValidators.forgotPassword,
   async (req, res, next) => {
@@ -133,20 +133,75 @@ exports.forgotPassword = [
         return responseHelper.success(res, null, RESPONSE_MESSAGES.AUTH.PASSWORD_RESET_SENT);
       }
 
-      // Generate reset token (shorter expiry for security)
-      const resetToken = jwt.sign({ userId: user._id, type: 'password_reset' }, process.env.JWT_SECRET, { expiresIn: '15m' });
+      // Generate 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      // Save OTP to user
+      user.passwordResetOTP = otp;
+      user.passwordResetOTPExpires = otpExpires;
+      await user.save();
       
       try {
-        await sendTemplateEmail('passwordReset', {
+        await sendTemplateEmail('passwordResetOTP', {
           firstName: user.firstName,
-          resetToken
+          otp
         }, { to: email });
       } catch (emailError) {
-        console.error('Password reset email failed:', emailError);
+        console.error('Password reset OTP email failed:', emailError);
+        // Clear OTP if email fails
+        user.passwordResetOTP = undefined;
+        user.passwordResetOTPExpires = undefined;
+        await user.save();
         return responseHelper.error(res, 'Failed to send reset email. Please try again.', 500);
       }
 
       responseHelper.success(res, null, RESPONSE_MESSAGES.AUTH.PASSWORD_RESET_SENT);
+    } catch (error) {
+      next(error);
+    }
+  }
+];
+
+// Verify OTP
+exports.verifyOTP = [
+  ...authValidators.verifyOTP,
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return responseHelper.validationError(res, errors);
+      }
+
+      const { email, otp } = req.body;
+
+      const user = await User.findOne({ email, isActive: true });
+      if (!user) {
+        return responseHelper.error(res, 'Invalid email or OTP', 400);
+      }
+
+      // Check if OTP exists and is valid
+      if (!user.passwordResetOTP || !user.passwordResetOTPExpires) {
+        return responseHelper.error(res, 'OTP not found or expired. Please request a new OTP.', 400);
+      }
+
+      // Check if OTP is expired
+      if (user.passwordResetOTPExpires < new Date()) {
+        user.passwordResetOTP = undefined;
+        user.passwordResetOTPExpires = undefined;
+        await user.save();
+        return responseHelper.error(res, 'OTP has expired. Please request a new OTP.', 400);
+      }
+
+      // Verify OTP
+      if (user.passwordResetOTP !== otp) {
+        return responseHelper.error(res, 'Invalid OTP. Please try again.', 400);
+      }
+
+      // Generate a temporary token for password reset (valid for 5 minutes)
+      const resetToken = jwt.sign({ userId: user._id, email: user.email, type: 'password_reset' }, process.env.JWT_SECRET, { expiresIn: '5m' });
+
+      responseHelper.success(res, { resetToken }, 'OTP verified successfully');
     } catch (error) {
       next(error);
     }
@@ -182,7 +237,10 @@ exports.resetPassword = [
         return responseHelper.error(res, RESPONSE_MESSAGES.AUTH.USER_NOT_FOUND, 404);
       }
 
+      // Update password and clear OTP
       user.password = password;
+      user.passwordResetOTP = undefined;
+      user.passwordResetOTPExpires = undefined;
       await user.save();
 
       responseHelper.success(res, null, RESPONSE_MESSAGES.AUTH.PASSWORD_RESET_SUCCESS);

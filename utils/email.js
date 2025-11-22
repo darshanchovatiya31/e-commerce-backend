@@ -109,7 +109,37 @@ const emailTemplates = {
     };
   },
 
-  // Password Reset Email
+  // Password Reset OTP Email
+  passwordResetOTP: (data) => {
+    const { firstName, otp } = data;
+    const content = `
+      <div style="text-align: center; padding: 30px 0;">
+        <div style="background: linear-gradient(135deg, #8B0000, #2dd4bf); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+          <h2 style="margin: 0; font-size: 24px;">🔐 Password Reset OTP</h2>
+        </div>
+        <p style="font-size: 16px; color: #333;">Dear ${firstName},</p>
+        <p style="color: #6b7280;">We received a request to reset your password. Use the OTP below to verify your identity:</p>
+        <div style="margin: 30px 0;">
+          <div style="background: linear-gradient(135deg, #fef3c7, #fed7aa); padding: 25px; border-radius: 12px; border: 3px solid #8B0000;">
+            <p style="margin: 0; color: #92400e; font-size: 14px; font-weight: 600; margin-bottom: 10px;">Your One-Time Password (OTP)</p>
+            <p style="margin: 0; color: #8B0000; font-size: 36px; font-weight: 700; letter-spacing: 8px; font-family: 'Courier New', monospace;">${otp}</p>
+          </div>
+        </div>
+        <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin-top: 20px;">
+          <p style="margin: 0; color: #92400e; font-size: 14px;">⚠️ This OTP will expire in 10 minutes for security reasons.</p>
+        </div>
+        <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
+        <p style="color: #6b7280; font-size: 12px; margin-top: 10px;">For security reasons, never share this OTP with anyone.</p>
+      </div>
+    `;
+    return {
+      subject: 'Password Reset OTP - Samjubaa Creation',
+      html: getBaseTemplate(content, 'Password Reset OTP'),
+      text: `Password Reset OTP\n\nDear ${firstName},\n\nWe received a request to reset your password. Use the OTP below to verify your identity:\n\nOTP: ${otp}\n\nThis OTP will expire in 10 minutes.\n\nIf you didn't request this, please ignore this email. For security reasons, never share this OTP with anyone.`
+    };
+  },
+
+  // Password Reset Email (Legacy - kept for backward compatibility)
   passwordReset: (data) => {
     const { firstName, resetToken } = data;
     const resetUrl = `${process.env.FRONTEND_URL || 'https://samjubaa.com'}/reset-password/${resetToken}`;
