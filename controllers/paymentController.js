@@ -2,7 +2,7 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const Order = require('../models/Order');
 const { body, validationResult } = require('express-validator');
-const { sendEmail } = require('../utils/email');
+const { sendTemplateEmail } = require('../utils/email');
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -135,12 +135,20 @@ exports.webhook = async (req, res, next) => {
           { orderId: order_id },
           { paymentStatus: 'completed', orderStatus: 'processing' },
           { new: true }
-        );
-        await sendEmail({
-          to: order.userId.email,
-          subject: 'Order Confirmation',
-          text: `Your order ${order_id} has been confirmed!`
-        });
+        ).populate('userId', 'firstName lastName email');
+        
+        if (order && order.userId) {
+          try {
+            await sendTemplateEmail('paymentConfirmation', {
+              orderId: order.orderId,
+              customerName: order.userId.firstName,
+              amount: order.total,
+              paymentMethod: order.paymentMethod || 'Online Payment'
+            }, { to: order.userId.email });
+          } catch (emailError) {
+            console.error('Failed to send payment confirmation email:', emailError);
+          }
+        }
       }
       res.json({ status: 'ok' });
     } else {

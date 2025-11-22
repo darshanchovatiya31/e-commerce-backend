@@ -1,7 +1,7 @@
 const { validationResult, body } = require('express-validator');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const { sendEmail } = require('../utils/email');
+const { sendTemplateEmail } = require('../utils/email');
 const responseHelper = require('../utils/responseHelper');
 const RESPONSE_MESSAGES = require('../constants/responseMessages');
 const authValidators = require('../validators/authValidators');
@@ -40,10 +40,10 @@ exports.register = [
 
       // Send welcome email
       try {
-        await sendEmail({
-          to: email,
-          subject: 'Welcome to Samjubaa Creation',
-          text: `Dear ${firstName}, welcome to Samjubaa Creation! Your account has been created successfully.`
+        await sendTemplateEmail('welcome', {
+          firstName,
+          lastName,
+          email
         });
       } catch (emailError) {
         console.error('Email sending failed:', emailError);
@@ -137,11 +137,10 @@ exports.forgotPassword = [
       const resetToken = jwt.sign({ userId: user._id, type: 'password_reset' }, process.env.JWT_SECRET, { expiresIn: '15m' });
       
       try {
-        await sendEmail({
-          to: email,
-          subject: 'Password Reset Request - Samjubaa Creation',
-          text: `You requested a password reset. Click the link below to reset your password:\n\n${process.env.FRONTEND_URL}/reset-password/${resetToken}\n\nThis link will expire in 15 minutes.\n\nIf you didn't request this, please ignore this email.`
-        });
+        await sendTemplateEmail('passwordReset', {
+          firstName: user.firstName,
+          resetToken
+        }, { to: email });
       } catch (emailError) {
         console.error('Password reset email failed:', emailError);
         return responseHelper.error(res, 'Failed to send reset email. Please try again.', 500);

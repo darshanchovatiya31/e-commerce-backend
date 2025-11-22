@@ -3,7 +3,7 @@ const Order = require('../models/Order');
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 const User = require('../models/User');
-const { sendEmail } = require('../utils/email');
+const { sendTemplateEmail } = require('../utils/email');
 const responseHelper = require('../utils/responseHelper');
 const RESPONSE_MESSAGES = require('../constants/responseMessages');
 const orderValidators = require('../validators/orderValidators');
@@ -153,24 +153,14 @@ exports.createOrder = [
 
       // Send order confirmation email
       try {
-        await sendEmail({
-          to: req.user.email,
-          subject: `Order Confirmation - ${orderId}`,
-          html: `
-            <h2>Order Placed Successfully!</h2>
-            <p>Dear ${req.user.firstName},</p>
-            <p>Thank you for your order. Your order <strong>${orderId}</strong> has been placed successfully.</p>
-            <h3>Order Summary:</h3>
-            <ul>
-              ${orderItems.map(item => `
-                <li>${item.name} - Qty: ${item.quantity} - ₹${item.price}</li>
-              `).join('')}
-            </ul>
-            <p><strong>Total: ₹${total}</strong></p>
-            <p>Estimated delivery: ${order.estimatedDelivery.toDateString()}</p>
-            <p>We'll send you updates about your order status.</p>
-            <p>Thank you for shopping with Samjubaa Creation!</p>
-          `
+        await sendTemplateEmail('orderConfirmation', {
+          orderId,
+          customerName: req.user.firstName,
+          customerEmail: req.user.email,
+          items: orderItems,
+          total,
+          shippingAddress,
+          estimatedDelivery: order.estimatedDelivery
         });
       } catch (emailError) {
         console.error('Failed to send order confirmation email:', emailError);
@@ -354,27 +344,13 @@ exports.updateOrderStatus = [
 
       // Send status update email
       try {
-        const statusMessages = {
-          confirmed: 'Your order has been confirmed and is being prepared.',
-          processing: 'Your order is being processed.',
-          shipped: `Your order has been shipped${trackingNumber ? ` with tracking number: ${trackingNumber}` : ''}.`,
-          delivered: 'Your order has been delivered successfully!',
-          cancelled: 'Your order has been cancelled.'
-        };
-
-        await sendEmail({
-          to: order.userId.email,
-          subject: `Order ${order.orderId} - Status Update`,
-          html: `
-            <h2>Order Status Update</h2>
-            <p>Dear ${order.userId.firstName},</p>
-            <p>Your order <strong>${order.orderId}</strong> status has been updated to: <strong>${status.toUpperCase()}</strong></p>
-            <p>${statusMessages[status] || 'Your order status has been updated.'}</p>
-            ${trackingNumber ? `<p>Tracking Number: <strong>${trackingNumber}</strong></p>` : ''}
-            ${notes ? `<p>Additional Notes: ${notes}</p>` : ''}
-            <p>Thank you for shopping with Samjubaa Creation!</p>
-          `
-        });
+        await sendTemplateEmail('orderStatusUpdate', {
+          orderId: order.orderId,
+          customerName: order.userId.firstName,
+          status,
+          trackingNumber,
+          notes
+        }, { to: order.userId.email });
       } catch (emailError) {
         console.error('Failed to send status update email:', emailError);
       }
@@ -433,18 +409,11 @@ exports.cancelOrder = [
 
       // Send cancellation email
       try {
-        await sendEmail({
-          to: order.userId.email,
-          subject: `Order ${order.orderId} - Cancelled`,
-          html: `
-            <h2>Order Cancelled</h2>
-            <p>Dear ${order.userId.firstName},</p>
-            <p>Your order <strong>${order.orderId}</strong> has been cancelled successfully.</p>
-            ${req.body.reason ? `<p>Reason: ${req.body.reason}</p>` : ''}
-            <p>If payment was made, refund will be processed within 5-7 business days.</p>
-            <p>Thank you for shopping with Samjubaa Creation!</p>
-          `
-        });
+        await sendTemplateEmail('orderCancellation', {
+          orderId: order.orderId,
+          customerName: order.userId.firstName,
+          reason: req.body.reason
+        }, { to: order.userId.email });
       } catch (emailError) {
         console.error('Failed to send cancellation email:', emailError);
       }

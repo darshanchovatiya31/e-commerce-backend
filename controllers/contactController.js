@@ -1,6 +1,7 @@
 const { body, validationResult } = require('express-validator');
 const Contact = require('../models/Contact');
 const responseHelper = require('../utils/responseHelper');
+const { sendTemplateEmail } = require('../utils/email');
 
 exports.validateCreate = [
   body('name').trim().isLength({ min: 2, max: 100 }),
@@ -31,6 +32,34 @@ exports.create = [
           userAgent: req.get('user-agent'),
         },
       });
+
+      // Send confirmation email to user
+      try {
+        await sendTemplateEmail('contactConfirmation', {
+          name,
+          subject
+        }, { to: email });
+      } catch (emailError) {
+        console.error('Failed to send contact confirmation email:', emailError);
+        // Don't fail the contact creation if email fails
+      }
+
+      // Send notification email to admin
+      try {
+        const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+        if (adminEmail) {
+          await sendTemplateEmail('contactNotification', {
+            name,
+            email,
+            phone,
+            subject,
+            message
+          }, { to: adminEmail });
+        }
+      } catch (emailError) {
+        console.error('Failed to send contact notification email to admin:', emailError);
+        // Don't fail the contact creation if email fails
+      }
 
       return responseHelper.success(res, doc, 'Message received. We will get back to you soon.', 201);
     } catch (err) {
