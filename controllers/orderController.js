@@ -19,7 +19,7 @@ exports.createOrder = [
         return responseHelper.validationError(res, errors);
       }
 
-      const { shippingAddress, billingAddress, paymentMethod, couponCode } = req.body;
+      const { shippingAddress, billingAddress, paymentMethod, couponCode, tax: providedTax, shipping: providedShipping, razorpayOrderId } = req.body;
       
       // Get user's cart with populated products
       const cart = await Cart.findOne({ userId: req.user._id })
@@ -84,8 +84,28 @@ exports.createOrder = [
         }
       }
 
-      const tax = (subtotal - discount) * 0.18; // 18% GST
-      const shipping = subtotal > 500 ? 0 : 50; // Free shipping above ₹500
+      // Use provided tax and shipping from frontend, or calculate them
+      // Frontend calculation: tax = 5% of subtotal, shipping = 120 if total < 5000
+      let tax;
+      let shipping;
+      
+      if (providedTax !== undefined && providedTax !== null) {
+        // Use tax value from frontend
+        tax = parseFloat(providedTax);
+      } else {
+        // Calculate tax: 5% of subtotal (matching frontend logic)
+        tax = Math.round((subtotal - discount) * 0.05);
+      }
+      
+      if (providedShipping !== undefined && providedShipping !== null) {
+        // Use shipping value from frontend
+        shipping = parseFloat(providedShipping);
+      } else {
+        // Calculate shipping: 120 if subtotal + tax <= 5000, else 0 (matching frontend logic)
+        const totalBeforeShipping = subtotal - discount + tax;
+        shipping = totalBeforeShipping > 5000 ? 0 : 120;
+      }
+      
       const total = subtotal - discount + tax + shipping;
 
       // Generate unique short order ID (8 characters)
@@ -115,6 +135,7 @@ exports.createOrder = [
         shipping,
         total,
         couponCode: couponCode || null,
+        razorpayOrderId: razorpayOrderId || null, // Store Razorpay order ID if provided
         estimatedDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days from now
       });
 

@@ -47,7 +47,23 @@ const orderValidators = {
       .optional()
       .trim()
       .isLength({ min: 3, max: 20 })
-      .withMessage('Coupon code must be between 3 and 20 characters')
+      .withMessage('Coupon code must be between 3 and 20 characters'),
+    
+    body('tax')
+      .optional()
+      .isFloat({ min: 0 })
+      .withMessage('Tax must be a non-negative number'),
+    
+    body('shipping')
+      .optional()
+      .isFloat({ min: 0 })
+      .withMessage('Shipping must be a non-negative number'),
+    
+    body('razorpayOrderId')
+      .optional()
+      .trim()
+      .isLength({ min: 1, max: 100 })
+      .withMessage('Razorpay order ID must be between 1 and 100 characters')
   ],
 
   updateOrderStatus: [
