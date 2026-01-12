@@ -1,7 +1,7 @@
 const { body, validationResult } = require('express-validator');
 const Contact = require('../models/Contact');
 const responseHelper = require('../utils/responseHelper');
-const { sendTemplateEmail } = require('../utils/email');
+const transporter = require('../utils/email');
 
 exports.validateCreate = [
   body('name').trim().isLength({ min: 2, max: 100 }),
@@ -33,29 +33,53 @@ exports.create = [
         },
       });
 
-      // Send confirmation email to user
+      // Send confirmation email to user - Same as Blog Haven
       try {
-        await sendTemplateEmail('contactConfirmation', {
-          name,
-          subject
-        }, { to: email });
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: `We Received Your Message - ${subject}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h1 style="color: #8B0000;">Message Received</h1>
+              <p>Dear ${name},</p>
+              <p>Thank you for contacting Samjubaa Creation!</p>
+              <p>We have received your message regarding "<strong>${subject}</strong>" and our team will get back to you within 24-48 hours.</p>
+              <p>We appreciate your patience and look forward to assisting you.</p>
+              
+              <h3 style="color: #8B0000;">Best regards,</h3>
+              <p>The Samjubaa Creation Team</p>
+            </div>
+          `,
+        });
       } catch (emailError) {
         console.error('Failed to send contact confirmation email:', emailError);
         // Don't fail the contact creation if email fails
       }
 
-      // Send notification email to admin
+      // Send notification email to admin - Same as Blog Haven
       try {
         const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
-        if (adminEmail) {
-          await sendTemplateEmail('contactNotification', {
-            name,
-            email,
-            phone,
-            subject,
-            message
-          }, { to: adminEmail });
-        }
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: adminEmail,
+          subject: `New Contact Form: ${subject}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h2 style="color: #8B0000;">New Contact Form Submission</h2>
+              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Name:</strong> ${name}</p>
+                <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
+                ${phone ? `<p><strong>Phone:</strong> <a href="tel:${phone}">${phone}</a></p>` : ''}
+                <p><strong>Subject:</strong> ${subject}</p>
+              </div>
+              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px;">
+                <h3 style="color: #8B0000;">Message:</h3>
+                <p style="white-space: pre-wrap;">${message}</p>
+              </div>
+            </div>
+          `,
+        });
       } catch (emailError) {
         console.error('Failed to send contact notification email to admin:', emailError);
         // Don't fail the contact creation if email fails

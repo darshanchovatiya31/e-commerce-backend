@@ -1,7 +1,7 @@
 const { validationResult, body } = require('express-validator');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const { sendTemplateEmail } = require('../utils/email');
+const transporter = require('../utils/email');
 const responseHelper = require('../utils/responseHelper');
 const RESPONSE_MESSAGES = require('../constants/responseMessages');
 const authValidators = require('../validators/authValidators');
@@ -38,12 +38,41 @@ exports.register = [
       // Generate tokens
       const { token, refreshToken } = generateTokens(user._id);
 
-      // Send welcome email
+      // Send welcome email - Same as Blog Haven
       try {
-        await sendTemplateEmail('welcome', {
-          firstName,
-          lastName,
-          email
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: "Samjubaa Creation - Welcome!",
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h1 style="color: #8B0000;">Welcome, ${firstName} ${lastName}!</h1>
+              <p>We're excited to have you join <strong>Samjubaa Creation</strong>, your destination for timeless elegance and quality products.</p>
+              
+              <h2 style="color: #8B0000;">Your account has been successfully created!</h2>
+              <p>You can now:</p>
+              
+              <ul style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; list-style: none; color: #333;">
+                <li style="margin-bottom: 10px;">
+                  <strong>🔹 Browse Products:</strong> Explore our exclusive collection of premium products.
+                </li>
+                <li style="margin-bottom: 10px;">
+                  <strong>🔹 Save to Wishlist:</strong> Save your favorite items for later.
+                </li>
+                <li style="margin-bottom: 10px;">
+                  <strong>🔹 Track Orders:</strong> Easily track your orders and delivery status.
+                </li>
+                <li style="margin-bottom: 10px;">
+                  <strong>🔹 Special Offers:</strong> Enjoy member-only offers and discounts.
+                </li>
+              </ul>
+              
+              <p>Thank you for joining Samjubaa Creation! We look forward to serving you.</p>
+              
+              <h3 style="color: #8B0000;">Best regards,</h3>
+              <p>The Samjubaa Creation Team</p>
+            </div>
+          `,
         });
       } catch (emailError) {
         console.error('Email sending failed:', emailError);
@@ -143,10 +172,29 @@ exports.forgotPassword = [
       await user.save();
       
       try {
-        await sendTemplateEmail('passwordResetOTP', {
-          firstName: user.firstName,
-          otp
-        }, { to: email });
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: "Samjubaa Creation - Password Reset OTP",
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h1 style="color: #8B0000;">Password Reset OTP</h1>
+              <p>Dear ${user.firstName},</p>
+              <p>We received a request to reset your password. Use the OTP below to verify your identity:</p>
+              
+              <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+                <h2 style="color: #8B0000; font-size: 32px; letter-spacing: 5px;">${otp}</h2>
+              </div>
+              
+              <p style="color: #666;">⚠️ This OTP will expire in 10 minutes for security reasons.</p>
+              <p style="color: #666;">If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
+              <p style="color: #666; font-size: 12px;">For security reasons, never share this OTP with anyone.</p>
+              
+              <h3 style="color: #8B0000;">Best regards,</h3>
+              <p>The Samjubaa Creation Team</p>
+            </div>
+          `,
+        });
       } catch (emailError) {
         console.error('Password reset OTP email failed:', emailError);
         // Clear OTP if email fails

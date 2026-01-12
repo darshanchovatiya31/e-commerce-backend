@@ -3,7 +3,7 @@ const Order = require('../models/Order');
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 const User = require('../models/User');
-const { sendTemplateEmail } = require('../utils/email');
+const transporter = require('../utils/email');
 const responseHelper = require('../utils/responseHelper');
 const RESPONSE_MESSAGES = require('../constants/responseMessages');
 const orderValidators = require('../validators/orderValidators');
@@ -172,16 +172,51 @@ exports.createOrder = [
         { items: [] }
       );
 
-      // Send order confirmation email
+      // Send order confirmation email - Same as Blog Haven
       try {
-        await sendTemplateEmail('orderConfirmation', {
-          orderId,
-          customerName: req.user.firstName,
-          customerEmail: req.user.email,
-          items: orderItems,
-          total,
-          shippingAddress,
-          estimatedDelivery: order.estimatedDelivery
+        const itemsHtml = orderItems.map(item => `
+          <div style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
+            <p><strong>${item.name}</strong> - Quantity: ${item.quantity} - Price: ₹${(item.price * item.quantity).toLocaleString()}</p>
+          </div>
+        `).join('');
+        
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: req.user.email,
+          subject: `Order Confirmation - ${orderId} | Samjubaa Creation`,
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h1 style="color: #8B0000;">🎉 Order Confirmed!</h1>
+              <p>Dear ${req.user.firstName},</p>
+              <p>Thank you for your purchase! Your order has been confirmed.</p>
+              
+              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #8B0000;">Order Details</h3>
+                <p><strong>Order Number:</strong> ${orderId}</p>
+                <p><strong>Estimated Delivery:</strong> ${new Date(order.estimatedDelivery).toLocaleDateString()}</p>
+              </div>
+              
+              <h3 style="color: #8B0000;">Your Order Items:</h3>
+              ${itemsHtml}
+              
+              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Total Amount:</strong> ₹${total.toLocaleString()}</p>
+              </div>
+              
+              <h3 style="color: #8B0000;">Shipping Address:</h3>
+              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px;">
+                <p>${shippingAddress.fullName || shippingAddress.name}<br>
+                ${shippingAddress.address}<br>
+                ${shippingAddress.city}, ${shippingAddress.state}<br>
+                ${shippingAddress.pincode}</p>
+              </div>
+              
+              <p>We'll prepare your order with care and you'll receive shipping confirmation soon.</p>
+              
+              <h3 style="color: #8B0000;">Best regards,</h3>
+              <p>The Samjubaa Creation Team</p>
+            </div>
+          `,
         });
       } catch (emailError) {
         console.error('Failed to send order confirmation email:', emailError);
@@ -363,15 +398,31 @@ exports.updateOrderStatus = [
 
       await order.save();
 
-      // Send status update email
+      // Send status update email - Same as Blog Haven
       try {
-        await sendTemplateEmail('orderStatusUpdate', {
-          orderId: order.orderId,
-          customerName: order.userId.firstName,
-          status,
-          trackingNumber,
-          notes
-        }, { to: order.userId.email });
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: order.userId.email,
+          subject: `Order ${order.orderId} - Status Update | Samjubaa Creation`,
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h1 style="color: #8B0000;">📦 Order Status Update</h1>
+              <p>Dear ${order.userId.firstName},</p>
+              <p>Your order <strong>${order.orderId}</strong> status has been updated.</p>
+              
+              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Status:</strong> <span style="color: #8B0000; font-weight: 600; text-transform: uppercase;">${status}</span></p>
+                ${trackingNumber ? `<p><strong>Tracking Number:</strong> ${trackingNumber}</p>` : ''}
+                ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
+              </div>
+              
+              <p>Thank you for shopping with Samjubaa Creation!</p>
+              
+              <h3 style="color: #8B0000;">Best regards,</h3>
+              <p>The Samjubaa Creation Team</p>
+            </div>
+          `,
+        });
       } catch (emailError) {
         console.error('Failed to send status update email:', emailError);
       }
@@ -428,13 +479,27 @@ exports.cancelOrder = [
         );
       }
 
-      // Send cancellation email
+      // Send cancellation email - Same as Blog Haven
       try {
-        await sendTemplateEmail('orderCancellation', {
-          orderId: order.orderId,
-          customerName: order.userId.firstName,
-          reason: req.body.reason
-        }, { to: order.userId.email });
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: order.userId.email,
+          subject: `Order ${order.orderId} - Cancelled | Samjubaa Creation`,
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h1 style="color: #8B0000;">❌ Order Cancelled</h1>
+              <p>Dear ${order.userId.firstName},</p>
+              <p>Your order <strong>${order.orderId}</strong> has been cancelled successfully.</p>
+              ${req.body.reason ? `<div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;"><p><strong>Reason:</strong> ${req.body.reason}</p></div>` : ''}
+              <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="color: #92400e;">💰 If payment was made, refund will be processed within 5-7 business days.</p>
+              </div>
+              
+              <h3 style="color: #8B0000;">Best regards,</h3>
+              <p>The Samjubaa Creation Team</p>
+            </div>
+          `,
+        });
       } catch (emailError) {
         console.error('Failed to send cancellation email:', emailError);
       }

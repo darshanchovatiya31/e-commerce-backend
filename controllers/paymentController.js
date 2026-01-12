@@ -5,7 +5,7 @@ const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const { body, validationResult } = require('express-validator');
-const { sendTemplateEmail } = require('../utils/email');
+const transporter = require('../utils/email');
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -235,16 +235,51 @@ exports.verifyPayment = [
         { items: [] }
       );
 
-      // Send order confirmation email
+      // Send order confirmation email - Same as Blog Haven
       try {
-        await sendTemplateEmail('orderConfirmation', {
-          orderId,
-          customerName: req.user.firstName,
-          customerEmail: req.user.email,
-          items: orderItems,
-          total,
-          shippingAddress: orderData.shippingAddress,
-          estimatedDelivery: order.estimatedDelivery
+        const itemsHtml = orderItems.map(item => `
+          <div style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
+            <p><strong>${item.name}</strong> - Quantity: ${item.quantity} - Price: ₹${(item.price * item.quantity).toLocaleString()}</p>
+          </div>
+        `).join('');
+        
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: req.user.email,
+          subject: `Order Confirmation - ${orderId} | Samjubaa Creation`,
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h1 style="color: #8B0000;">🎉 Order Confirmed!</h1>
+              <p>Dear ${req.user.firstName},</p>
+              <p>Thank you for your purchase! Your order has been confirmed.</p>
+              
+              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #8B0000;">Order Details</h3>
+                <p><strong>Order Number:</strong> ${orderId}</p>
+                <p><strong>Estimated Delivery:</strong> ${new Date(order.estimatedDelivery).toLocaleDateString()}</p>
+              </div>
+              
+              <h3 style="color: #8B0000;">Your Order Items:</h3>
+              ${itemsHtml}
+              
+              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Total Amount:</strong> ₹${total.toLocaleString()}</p>
+              </div>
+              
+              <h3 style="color: #8B0000;">Shipping Address:</h3>
+              <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px;">
+                <p>${orderData.shippingAddress.fullName || orderData.shippingAddress.name}<br>
+                ${orderData.shippingAddress.address}<br>
+                ${orderData.shippingAddress.city}, ${orderData.shippingAddress.state}<br>
+                ${orderData.shippingAddress.pincode}</p>
+              </div>
+              
+              <p>We'll prepare your order with care and you'll receive shipping confirmation soon.</p>
+              
+              <h3 style="color: #8B0000;">Best regards,</h3>
+              <p>The Samjubaa Creation Team</p>
+            </div>
+          `,
         });
       } catch (emailError) {
         console.error('Failed to send order confirmation email:', emailError);
@@ -292,12 +327,29 @@ exports.webhook = async (req, res, next) => {
         
         if (order && order.userId) {
           try {
-            await sendTemplateEmail('paymentConfirmation', {
-              orderId: order.orderId,
-              customerName: order.userId.firstName,
-              amount: order.total,
-              paymentMethod: order.paymentMethod || 'Online Payment'
-            }, { to: order.userId.email });
+            await transporter.sendMail({
+              from: process.env.EMAIL_USER,
+              to: order.userId.email,
+              subject: `Payment Confirmed - Order ${order.orderId} | Samjubaa Creation`,
+              html: `
+                <div style="font-family: Arial, sans-serif; color: #333;">
+                  <h1 style="color: #8B0000;">✅ Payment Confirmed</h1>
+                  <p>Dear ${order.userId.firstName},</p>
+                  <p>Your payment for order <strong>${order.orderId}</strong> has been confirmed!</p>
+                  
+                  <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <p><strong>Amount Paid:</strong> ₹${order.total.toLocaleString()}</p>
+                    <p><strong>Payment Method:</strong> ${order.paymentMethod || 'Online Payment'}</p>
+                    <p><strong>Order Number:</strong> ${order.orderId}</p>
+                  </div>
+                  
+                  <p>Your order is now being processed and you'll receive updates via email.</p>
+                  
+                  <h3 style="color: #8B0000;">Best regards,</h3>
+                  <p>The Samjubaa Creation Team</p>
+                </div>
+              `,
+            });
           } catch (emailError) {
             console.error('Failed to send payment confirmation email:', emailError);
           }
