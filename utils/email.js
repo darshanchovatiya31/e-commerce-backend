@@ -1,42 +1,157 @@
 const nodemailer = require('nodemailer');
 
-// Initialize transporter with better configuration
+/**
+ * Create email transporter based on configured provider
+ * Supports: SendGrid, Mailgun, AWS SES, Postmark, Resend, and SMTP fallback
+ */
 const createTransporter = () => {
-  // Check if email credentials are configured
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('⚠️  Email credentials not configured. Email functionality will be disabled.');
-    return null;
-  }
-
-  const config = {
-    service: process.env.EMAIL_SERVICE || 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
+  const emailProvider = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
+  
+  // SendGrid API
+  if (emailProvider === 'sendgrid') {
+    if (!process.env.SENDGRID_API_KEY) {
+      console.warn('⚠️  SendGrid API key not configured. Email functionality will be disabled.');
+      return null;
     }
-  };
-
-  // For custom SMTP servers
-  if (process.env.EMAIL_HOST) {
-    config.host = process.env.EMAIL_HOST;
-    config.port = parseInt(process.env.EMAIL_PORT || '587');
-    config.secure = process.env.EMAIL_SECURE === 'true';
+    
+    // SendGrid via nodemailer (using SMTP API)
+    return nodemailer.createTransport({
+      service: 'SendGrid',
+      auth: {
+        user: 'apikey',
+        pass: process.env.SENDGRID_API_KEY
+      }
+    });
   }
 
-  return nodemailer.createTransport(config);
+  // Mailgun API
+  if (emailProvider === 'mailgun') {
+    if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) {
+      console.warn('⚠️  Mailgun credentials not configured. Email functionality will be disabled.');
+      return null;
+    }
+    
+    // Mailgun via nodemailer (using SMTP API)
+    return nodemailer.createTransport({
+      host: 'smtp.mailgun.org',
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.MAILGUN_SMTP_USER || `postmaster@${process.env.MAILGUN_DOMAIN}`,
+        pass: process.env.MAILGUN_API_KEY
+      }
+    });
+  }
+
+  // AWS SES
+  if (emailProvider === 'ses' || emailProvider === 'aws') {
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+      console.warn('⚠️  AWS SES credentials not configured. Email functionality will be disabled.');
+      return null;
+    }
+    
+    // AWS SES via nodemailer
+    return nodemailer.createTransport({
+      SES: {
+        region: process.env.AWS_REGION || 'us-east-1',
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+        }
+      }
+    });
+  }
+
+  // Postmark
+  if (emailProvider === 'postmark') {
+    if (!process.env.POSTMARK_API_TOKEN) {
+      console.warn('⚠️  Postmark API token not configured. Email functionality will be disabled.');
+      return null;
+    }
+    
+    // Postmark via nodemailer (using SMTP API)
+    return nodemailer.createTransport({
+      host: 'smtp.postmarkapp.com',
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.POSTMARK_API_TOKEN,
+        pass: process.env.POSTMARK_API_TOKEN
+      }
+    });
+  }
+
+  // Resend
+  if (emailProvider === 'resend') {
+    if (!process.env.RESEND_API_KEY) {
+      console.warn('⚠️  Resend API key not configured. Email functionality will be disabled.');
+      return null;
+    }
+    
+    // Resend via nodemailer (using SMTP API)
+    return nodemailer.createTransport({
+      host: 'smtp.resend.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: 'resend',
+        pass: process.env.RESEND_API_KEY
+      }
+    });
+  }
+
+  // SMTP (fallback/default)
+  if (emailProvider === 'smtp' || !emailProvider) {
+    // Check if email credentials are configured
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.warn('⚠️  Email credentials not configured. Email functionality will be disabled.');
+      return null;
+    }
+
+    const config = {
+      service: process.env.EMAIL_SERVICE || 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    };
+
+    // For custom SMTP servers
+    if (process.env.EMAIL_HOST) {
+      config.host = process.env.EMAIL_HOST;
+      config.port = parseInt(process.env.EMAIL_PORT || '587');
+      config.secure = process.env.EMAIL_SECURE === 'true';
+    }
+
+    return nodemailer.createTransport(config);
+  }
+
+  console.warn(`⚠️  Unknown email provider: ${emailProvider}. Email functionality will be disabled.`);
+  return null;
 };
 
 const transporter = createTransporter();
 
-// Verify transporter connection
+// Verify transporter connection (non-blocking, async - doesn't block server startup)
 if (transporter) {
-  transporter.verify((error, success) => {
-    if (error) {
-      console.error('❌ Email transporter verification failed:', error.message);
-    } else {
-      console.log('✅ Email transporter is ready to send messages');
-    }
+  // Run verification asynchronously without blocking
+  setImmediate(() => {
+    const verifyTimeout = setTimeout(() => {
+      console.warn('⚠️  Email transporter verification timed out. Email functionality may be limited.');
+    }, 10000);
+
+    transporter.verify((error, success) => {
+      clearTimeout(verifyTimeout);
+      if (error) {
+        console.error('❌ Email transporter verification failed:', error.message);
+        console.warn('⚠️  Email sending may fail, but registration and other features will still work.');
+      } else {
+        console.log('✅ Email transporter is ready to send messages');
+      }
+    });
   });
+} else {
+  console.warn('⚠️  Email transporter not initialized. Email functionality will be disabled.');
 }
 
 // Base email template wrapper
@@ -392,8 +507,32 @@ exports.sendEmail = async ({ to, subject, text, html, attachments, cc, bcc }) =>
     throw new Error('Recipient email address is required');
   }
 
+  // Get sender email based on provider
+  const getSenderEmail = () => {
+    const emailProvider = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
+    
+    if (emailProvider === 'sendgrid' && process.env.SENDGRID_FROM_EMAIL) {
+      return process.env.SENDGRID_FROM_EMAIL;
+    }
+    if (emailProvider === 'mailgun' && process.env.MAILGUN_FROM_EMAIL) {
+      return process.env.MAILGUN_FROM_EMAIL;
+    }
+    if (emailProvider === 'ses' || emailProvider === 'aws') {
+      return process.env.AWS_SES_FROM_EMAIL || process.env.EMAIL_USER;
+    }
+    if (emailProvider === 'postmark' && process.env.POSTMARK_FROM_EMAIL) {
+      return process.env.POSTMARK_FROM_EMAIL;
+    }
+    if (emailProvider === 'resend' && process.env.RESEND_FROM_EMAIL) {
+      return process.env.RESEND_FROM_EMAIL;
+    }
+    
+    // Default to EMAIL_USER for SMTP
+    return process.env.EMAIL_USER || 'noreply@samjubaa.com';
+  };
+
   const mailOptions = {
-    from: `"Samjubaa Creation" <${process.env.EMAIL_USER}>`,
+    from: `"Samjubaa Creation" <${getSenderEmail()}>`,
     to: Array.isArray(to) ? to.join(', ') : to,
     subject: subject || 'Notification from Samjubaa Creation',
     text: text || '',
