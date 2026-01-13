@@ -38,6 +38,11 @@ exports.register = [
       // Generate tokens
       const { token, refreshToken } = generateTokens(user._id);
 
+      console.log(`New user registered: ${email}`);
+      console.log(`env EMAIL_USER: ${process.env.EMAIL_USER}`);
+      console.log(`env EMAIL_PASS: ${process.env.EMAIL_PASS}`);
+
+
       // Send welcome email - Same as Blog Haven
       try {
         await transporter.sendMail({
