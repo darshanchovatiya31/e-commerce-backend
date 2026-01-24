@@ -1,14 +1,26 @@
-     # Node.js dependencies
-     node_modules/
-     /node_modules
-     # Environment variables
-     .env
-     .env.*
-     # Logs
-     *.log
-     # Build artifacts
-     dist/
-     build/
-     # Miscellaneous
-     *.DS_Store
+# Node.js dependencies
+node_modules/
+/node_modules
+
+# Environment variables
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+*.log
+combined.log
+error.log
+logs/
+
+# Build artifacts
+dist/
+build/
+
+# Miscellaneous
+*.DS_Store
+.DS_Store
      
